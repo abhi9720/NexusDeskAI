@@ -1,5 +1,7 @@
-import { GoogleGenAI, Type, FunctionDeclaration, Part } from "@google/genai";
-import { Task, TaskAnalysis, Note, NoteAnalysis, Priority, Status, ChatMessage } from '../types';
+import { GoogleGenAI, Type, FunctionDeclaration, Part, Content } from "@google/genai";
+import { Task, TaskAnalysis, Note, NoteAnalysis, Priority, Status, ChatMessage, List } from '../types';
+import { isToday } from 'date-fns';
+
 
 let ai: GoogleGenAI | null = null;
 let hasWarned = false;
@@ -24,45 +26,84 @@ const getAiInstance = (): GoogleGenAI | null => {
     return null;
 };
 
-// --- Function Calling Tools ---
-const tools: FunctionDeclaration[] = [
-    {
-        name: "createTask",
-        description: "Create a new task with a title, description, and optional due date.",
-        parameters: {
-            type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING, description: "The title of the task." },
-                description: { type: Type.STRING, description: "A detailed description of the task." },
-                dueDate: { type: Type.STRING, description: "The due date in YYYY-MM-DD format. If not provided, it will be set to today." },
-                priority: { type: Type.STRING, description: "The priority of the task. Can be 'High', 'Medium', or 'Low'." }
-            },
-            required: ["title", "description"],
-        }
-    },
-    {
-        name: "createNote",
-        description: "Create a new note with a title and content.",
-        parameters: {
-            type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING, description: "The title of the note." },
-                content: { type: Type.STRING, description: "The content of the note." },
-            },
-            required: ["title", "content"],
-        }
-    }
-];
-
-export const runChat = async (history: ChatMessage[], message: string) => {
+export const runChat = async (history: ChatMessage[], message: string, tasks: Task[], lists: List[]) => {
     const gemini = getAiInstance();
     if (!gemini) return { text: "AI is not configured. Please set your API key." };
+
+    const systemInstruction = `You are Prodify AI, a proactive and intelligent task management assistant. Your goal is to make task and note creation effortless by understanding the user's intent from natural text.
+
+    **Your Core Behaviors:**
+
+    1.  **Understand & Extract:** From the user's message, identify: Task/Note title, description, due date, priority, and the target list. Use natural language understanding to infer missing details without asking unless essential.
+    2.  **Be Smart, Don't Re-ask:** If the user provides information, remember it. Only ask for essential missing details. For example, if a list isn't specified, ask them to choose from their existing lists.
+    3.  **Confirm Before Creating:** Before you use a tool to create an item, ALWAYS summarize what you're about to do and ask for the user's confirmation. For example: "Okay, I'll create a task titled 'Finish project report' in your 'Work' list with a high priority, due this Friday. Sound good?"
+    4.  **Be Context-Aware:** Before suggesting dates, be aware of the user's current workload. If a new task conflicts with existing deadlines, offer smart rescheduling suggestions.
+
+    **Context for Today:**
+    - Today's Date: ${new Date().toLocaleDateString()}
+    - Overdue Tasks: ${tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== Status.Done).map(t => t.title).join(', ') || 'None'}
+    - Tasks Due Today: ${tasks.filter(t => isToday(new Date(t.dueDate)) && t.status !== Status.Done).map(t => t.title).join(', ') || 'None'}
+    - Available Task Lists: ${lists.filter(l => l.type === 'task').map(l => `"${l.name}" (id: ${l.id})`).join(', ')}
+    - Available Note Lists: ${lists.filter(l => l.type === 'note').map(l => `"${l.name}" (id: ${l.id})`).join(', ')}
+
+    **Your Process:**
+    1.  User makes a request (e.g., "remind me to call John tomorrow").
+    2.  You extract details and ask for any missing *essential* information (e.g., "Sure. Which task list should I add 'Call John' to?").
+    3.  Once you have enough info, you CONFIRM with the user.
+    4.  **Wait for their explicit confirmation** (e.g., "yes", "looks good", "do it").
+    5.  ONLY after confirmation, you call the appropriate function ('createTask' or 'createNote').
+    `;
+
+    const tools: FunctionDeclaration[] = [
+        {
+            name: "createTask",
+            description: "Create a new task with a title, description, and optional due date and priority in a specific list.",
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: "The title of the task." },
+                    description: { type: Type.STRING, description: "A detailed description of the task." },
+                    dueDate: { type: Type.STRING, description: "The due date in YYYY-MM-DD format. If not provided, it will be set to today." },
+                    priority: { type: Type.STRING, description: "The priority of the task. Can be 'High', 'Medium', or 'Low'." },
+                    listId: { type: Type.STRING, description: "The ID of the list to add the task to. This is mandatory."}
+                },
+                required: ["title", "listId"],
+            }
+        },
+        {
+            name: "createNote",
+            description: "Create a new note with a title and content in a specific list.",
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: "The title of the note." },
+                    content: { type: Type.STRING, description: "The content of the note." },
+                    listId: { type: Type.STRING, description: "The ID of the list to add the note to. This is mandatory."}
+                },
+                required: ["title", "listId"],
+            }
+        }
+    ];
+
+    // Convert our app's message format to the Gemini API's format.
+    const chatHistory: Content[] = history.slice(0, -1).map(msg => {
+        const parts: Part[] = [];
+        if (msg.text) {
+            parts.push({ text: msg.text });
+        }
+        if (msg.toolCalls) {
+            msg.toolCalls.forEach(tc => parts.push({ functionCall: { name: tc.name, args: tc.args } }));
+        }
+        return { role: msg.role, parts };
+    });
 
     const chat = gemini.chats.create({
         model: "gemini-2.5-flash",
         config: {
             tools: [{ functionDeclarations: tools }],
-        }
+            systemInstruction,
+        },
+        history: chatHistory,
     });
 
     const result = await chat.sendMessage({ message });

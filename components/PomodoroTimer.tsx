@@ -38,7 +38,7 @@ const PomodoroTimer = () => {
             }
         }
     };
-
+    
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
         if (isActive && time > 0) {
@@ -49,12 +49,12 @@ const PomodoroTimer = () => {
             new Notification('Pomodoro Finished!', { body: 'Time for a short break.' });
             setIsActive(false);
         }
-
+        
         return () => {
             if (interval) clearInterval(interval);
         };
     }, [isActive, time]);
-
+    
     useEffect(() => {
         if (Notification.permission === 'default') {
             Notification.requestPermission();
@@ -85,7 +85,7 @@ const PomodoroTimer = () => {
                 <ClockIcon className="w-6 h-6 text-primary" />
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Pomodoro Timer</h3>
             </div>
-
+            
             {!isActive && (
                 <div className="my-6 space-y-4 transition-all duration-300 animate-fade-in">
                     <div className="flex justify-center gap-2">
@@ -93,10 +93,11 @@ const PomodoroTimer = () => {
                             <button
                                 key={pick.value}
                                 onClick={() => handleSetDuration(pick.value)}
-                                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${duration === pick.value * 60
+                                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
+                                    duration === pick.value * 60
                                         ? 'bg-primary text-white shadow-sm'
                                         : 'bg-gray-200 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                    }`}
+                                }`}
                             >
                                 {pick.label}
                             </button>
@@ -111,7 +112,7 @@ const PomodoroTimer = () => {
                             aria-label="Custom minutes"
                             className="w-16 px-2 py-1 text-center rounded-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary"
                         />
-                        <span className="text-gray-600 dark:text-gray-400">min</span>
+                         <span className="text-gray-600 dark:text-gray-400">min</span>
                     </div>
                 </div>
             )}

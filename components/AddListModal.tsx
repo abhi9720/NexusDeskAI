@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { List } from '../types';
 import { XMarkIcon } from './icons';
@@ -7,7 +5,7 @@ import { XMarkIcon } from './icons';
 interface AddListModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddList: (list: Omit<List, 'id'>) => void;
+  onAddList: (list: Omit<List, 'id' | 'statuses'>) => void;
   onUpdateList: (list: List) => void;
   listToEdit?: List | null;
 }
@@ -21,7 +19,7 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit }: 
   const [name, setName] = useState('');
   const [color, setColor] = useState(colorOptions[8]);
   const [type, setType] = useState<'task' | 'note'>('task');
-  const [defaultView, setDefaultView] = useState<'list' | 'board' | 'calendar' | 'bi-weekly'>('list');
+  const [defaultView, setDefaultView] = useState<'list' | 'board' | 'calendar'>('list');
 
   useEffect(() => {
     if (isOpen) {
@@ -47,7 +45,7 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit }: 
     if (!name.trim()) return;
 
     if (listToEdit) {
-        onUpdateList({ id: listToEdit.id, name, color, type, defaultView: type === 'task' ? defaultView : undefined });
+        onUpdateList({ ...listToEdit, name, color, type, defaultView: type === 'task' ? defaultView : undefined });
     } else {
         onAddList({ name, color, type, defaultView: type === 'task' ? defaultView : undefined });
     }
@@ -108,13 +106,12 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit }: 
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default View</label>
               <select
                   value={defaultView}
-                  onChange={e => setDefaultView(e.target.value as 'list' | 'board' | 'calendar' | 'bi-weekly')}
+                  onChange={e => setDefaultView(e.target.value as 'list' | 'board' | 'calendar')}
                   className="w-full px-4 py-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
               >
                   <option value="list">List</option>
                   <option value="board">Board</option>
                   <option value="calendar">Calendar</option>
-                  <option value="bi-weekly">Bi-weekly</option>
               </select>
             </div>
           )}

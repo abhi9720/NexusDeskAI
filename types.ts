@@ -1,12 +1,18 @@
 // --- New Types for Organization ---
-export type View = 'dashboard' | 'tasks' | 'notes';
+export type Theme = 'light' | 'dark' | 'system';
+
+export interface ListStatusMapping {
+  status: Status;
+  name: string;
+}
 
 export interface List {
   id: string;
   name: string;
   color: string;
   type: 'task' | 'note';
-  defaultView?: 'list' | 'board' | 'calendar' | 'bi-weekly';
+  defaultView?: 'list' | 'board' | 'calendar';
+  statuses?: ListStatusMapping[];
 }
 
 export interface TaskFilter {
@@ -76,8 +82,11 @@ export enum Priority {
 }
 
 export enum Status {
+  Backlog = 'Backlog',
   ToDo = 'To Do',
   InProgress = 'In Progress',
+  Review = 'Review',
+  Waiting = 'Waiting',
   Done = 'Done',
 }
 
@@ -94,6 +103,14 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
+export interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  userName: string;
+  avatarUrl?: string;
+}
+
 export interface Task {
   id:string;
   listId: string;
@@ -106,6 +123,7 @@ export interface Task {
   createdAt: string;
   attachments: Attachment[];
   checklist: ChecklistItem[];
+  comments: Comment[];
 }
 
 export interface Note {
@@ -155,4 +173,11 @@ export interface ChatMessage {
     data: any; // The result of the tool call (e.g., the created task object)
     status: 'ok' | 'error';
   };
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
 }

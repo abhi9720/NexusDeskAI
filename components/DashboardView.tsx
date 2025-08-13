@@ -1,7 +1,7 @@
 import React from 'react';
 import { Task, List, Note, Status, Priority } from '../types';
 import PomodoroTimer from './PomodoroTimer';
-import { SparklesIcon, CheckCircleIcon } from './icons';
+import { SparklesIcon, CheckCircleIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon } from './icons';
 import { isToday } from 'date-fns';
 import CalendarWidget from './CalendarWidget';
 
@@ -13,21 +13,35 @@ interface DashboardViewProps {
     onActiveSelectionChange: (selection: any) => void;
 }
 
-const WelcomeHeader = ({ onAskAI }: { onAskAI: () => void }) => (
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-                Good Morning!
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">
-                Here's your productivity dashboard for today.
-            </p>
+const WelcomeHeader = ({ onAskAI }: { onAskAI: () => void }) => {
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) {
+            return "Good Morning!";
+        } else if (hour < 18) {
+            return "Good Afternoon!";
+        } else {
+            return "Good Evening!";
+        }
+    };
+
+    return (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
+            <div>
+                <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
+                    {getGreeting()}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                    Here's your productivity dashboard for today.
+                </p>
+            </div>
+            <button onClick={onAskAI} className="px-4 py-2 text-sm font-semibold bg-primary text-white rounded-lg shadow-sm hover:bg-primary-dark flex items-center gap-2 transition-transform transform hover:scale-105">
+                <SparklesIcon className="w-5 h-5" />
+                Ask Prodify AI
+            </button>
         </div>
-        <button onClick={onAskAI} className="px-4 py-2 text-sm font-semibold bg-primary text-white rounded-lg shadow-sm hover:bg-primary-dark flex items-center gap-2 transition-transform transform hover:scale-105">
-            <SparklesIcon className="w-5 h-5" /> Ask Prodify AI
-        </button>
-    </div>
-);
+    );
+};
 
 const TasksDueToday = ({ tasks, onTaskClick }: { tasks: Task[], onTaskClick: (task: Task) => void }) => {
     const highPriorityTasks = tasks.filter(t => t.priority === Priority.High);
@@ -42,9 +56,31 @@ const TasksDueToday = ({ tasks, onTaskClick }: { tasks: Task[], onTaskClick: (ta
                 <div className="space-y-3">
                     {[...highPriorityTasks, ...otherTasks].map(task => (
                         <div key={task.id} onClick={() => onTaskClick(task)} className="p-3 flex justify-between items-center hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer transition-colors">
-                            <div className="flex items-center gap-3">
-                                <CheckCircleIcon className="w-5 h-5 text-gray-300 dark:text-gray-600"/>
-                                <span className="text-sm text-gray-700 dark:text-gray-200">{task.title}</span>
+                            <div className="flex-grow">
+                                <div className="flex items-center gap-3">
+                                    <CheckCircleIcon className="w-5 h-5 text-gray-300 dark:text-gray-600"/>
+                                    <span className="text-sm text-gray-700 dark:text-gray-200">{task.title}</span>
+                                </div>
+                                 <div className="flex items-center space-x-3 text-xs text-gray-400 dark:text-gray-500 mt-1 pl-8">
+                                    {task.comments?.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <ChatBubbleLeftEllipsisIcon className="w-4 h-4" />
+                                            <span>{task.comments.length}</span>
+                                        </div>
+                                    )}
+                                    {task.attachments?.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <PaperClipIcon className="w-4 h-4" />
+                                            <span>{task.attachments.length}</span>
+                                        </div>
+                                    )}
+                                    {task.checklist?.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <ListBulletIcon className="w-4 h-4" />
+                                            <span>{task.checklist.filter(i => i.completed).length}/{task.checklist.length}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex items-center gap-3">
                                 {task.priority === Priority.High && <span className="text-xs font-semibold px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300 rounded-md">High</span>}

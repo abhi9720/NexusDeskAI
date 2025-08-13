@@ -13,208 +13,142 @@ import {
   TaskFilter,
   ChecklistItem,
   Attachment,
+  ChatSession,
   ChatMessage,
   Goal,
   Habit,
   HabitLog,
+  ListStatusMapping,
+  Comment,
 } from './types';
 import { isDate, format } from 'date-fns';
+import { runChat } from './services/geminiService';
+
+declare global {
+    interface Window {
+        electronStore: {
+            get: (key: string) => Promise<any>;
+            set: (key: string, value: any) => void;
+        };
+        electron: {
+            ipcRenderer: {
+                invoke: (channel: string, ...args: any[]) => Promise<any>;
+            };
+        };
+    }
+}
 
 const App = () => {
     const isValidDate = (d: any): boolean => {
       return d && isDate(new Date(d));
     };
-
-    const validateAndMigrateArray = <T extends { id: string }>(
-        key: string,
-        validator: (item: any) => T | null
-    ): T[] => {
-        const saved = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
-        if (!saved) return [];
-        
-        try {
-            const parsed = JSON.parse(saved);
-            if (!Array.isArray(parsed)) return [];
-
-            const validatedItems: T[] = [];
-            for (const item of parsed) {
-                try {
-                    const validated = validator(item);
-                    if (validated) {
-                        validatedItems.push(validated);
-                    }
-                } catch (e) {
-                    console.error(`Skipping corrupted item in ${key}:`, item, e);
-                }
-            }
-            return validatedItems;
-        } catch (e) {
-            console.error(`Failed to parse ${key} from localStorage`, e);
-            return [];
-        }
-    };
     
     // --- STATE MANAGEMENT ---
-    const [lists, setLists] = useState<List[]>(() => validateAndMigrateArray<List>('lists', (l: any) => {
-        if (!l || typeof l.id !== 'string') return null;
-        return {
-            id: l.id,
-            name: typeof l.name === 'string' ? l.name : 'Untitled List',
-            color: typeof l.color === 'string' ? l.color : '#8b64fd',
-            type: l.type === 'task' || l.type === 'note' ? l.type : 'task',
-            defaultView: l.defaultView && ['list', 'board', 'calendar', 'bi-weekly'].includes(l.defaultView) ? l.defaultView : 'list',
-        };
-    }));
-
-    const [tasks, setTasks] = useState<Task[]>(() => validateAndMigrateArray<Task>('tasks', (t: any) => {
-        if (!t || typeof t.id !== 'string') return null;
-        return {
-            id: t.id,
-            listId: typeof t.listId === 'string' ? t.listId : '1',
-            title: typeof t.title === 'string' ? t.title : 'Untitled Task',
-            description: typeof t.description === 'string' ? t.description : '',
-            status: Object.values(Status).includes(t.status) ? t.status : Status.ToDo,
-            priority: Object.values(Priority).includes(t.priority) ? t.priority : Priority.Medium,
-            dueDate: isValidDate(t.dueDate) ? new Date(t.dueDate).toISOString() : new Date().toISOString(),
-            tags: Array.isArray(t.tags) ? t.tags.filter((tag: any): tag is string => typeof tag === 'string') : [],
-            createdAt: isValidDate(t.createdAt) ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
-            attachments: Array.isArray(t.attachments) ? t.attachments.map((a: any) => {
-                if (!a || typeof a !== 'object' || typeof a.id !== 'string') return null;
-                return {
-                    id: a.id,
-                    name: typeof a.name === 'string' ? a.name : 'attachment',
-                    type: typeof a.type === 'string' ? a.type : 'application/octet-stream',
-                    url: typeof a.url === 'string' ? a.url : ''
-                }
-            }).filter((a): a is Attachment => a !== null) : [],
-            checklist: Array.isArray(t.checklist) ? t.checklist.map((ci: any) => {
-                if (!ci || typeof ci !== 'object' || typeof ci.id !== 'string') return null;
-                return {
-                    id: ci.id,
-                    text: typeof ci.text === 'string' ? ci.text : 'checklist item',
-                    completed: typeof ci.completed === 'boolean' ? ci.completed : false,
-                }
-            }).filter((ci): ci is ChecklistItem => ci !== null) : [],
-        };
-    }));
-    
-    const [notes, setNotes] = useState<Note[]>(() => validateAndMigrateArray<Note>('notes', (n: any) => {
-        if (!n || typeof n.id !== 'string') return null;
-        return {
-            id: n.id,
-            listId: typeof n.listId === 'string' ? n.listId : '2',
-            title: typeof n.title === 'string' ? n.title : 'Untitled Note',
-            content: typeof n.content === 'string' ? n.content : '',
-            tags: Array.isArray(n.tags) ? n.tags.filter((tag: any): tag is string => typeof tag === 'string') : [],
-            createdAt: isValidDate(n.createdAt) ? new Date(n.createdAt).toISOString() : new Date().toISOString(),
-            updatedAt: isValidDate(n.updatedAt) ? new Date(n.updatedAt).toISOString() : new Date().toISOString(),
-            attachments: Array.isArray(n.attachments) ? n.attachments.map((a: any) => {
-                if (!a || typeof a !== 'object' || typeof a.id !== 'string') return null;
-                 return {
-                    id: a.id,
-                    name: typeof a.name === 'string' ? a.name : 'attachment',
-                    type: typeof a.type === 'string' ? a.type : 'application/octet-stream',
-                    url: typeof a.url === 'string' ? a.url : ''
-                }
-            }).filter((a): a is Attachment => a !== null) : [],
-        }
-    }));
-
-    const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => validateAndMigrateArray<SavedFilter>('savedFilters', (f: any) => {
-        if (!f || typeof f.id !== 'string' || typeof f.name !== 'string' || typeof f.filter !== 'object') return null;
-        if (
-            typeof f.filter.keyword === 'string' &&
-            (f.filter.status === 'all' || Object.values(Status).includes(f.filter.status)) &&
-            (f.filter.priority === 'all' || Object.values(Priority).includes(f.filter.priority))
-        ) {
-            return f as SavedFilter;
-        }
-        return null;
-    }));
-
-    const [stickyNotes, setStickyNotes] = useState<StickyNote[]>(() => validateAndMigrateArray<StickyNote>('stickyNotes', (n: any) => {
-        if (
-            !n || typeof n.id !== 'string' ||
-            typeof n.color !== 'string' || typeof n.position?.x !== 'number' || typeof n.position?.y !== 'number'
-        ) return null;
-        
-        return {
-            id: n.id,
-            title: typeof n.title === 'string' ? n.title : 'Sticky Note',
-            content: typeof n.content === 'string' ? n.content : '',
-            color: n.color,
-            position: n.position
-        }
-    }));
-    
-    const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => validateAndMigrateArray<ChatMessage>('chatHistory', (m: any) => {
-        if (!m || typeof m.id !== 'string' || (m.role !== 'user' && m.role !== 'model') || typeof m.text !== 'string') {
-            return null;
-        }
-        return m as ChatMessage;
-    }));
-
-    const [goals, setGoals] = useState<Goal[]>(() => validateAndMigrateArray<Goal>('goals', (g: any) => {
-      if (!g || typeof g.id !== 'string') return null;
-      return {
-        id: g.id,
-        title: typeof g.title === 'string' ? g.title : 'Untitled Goal',
-        vision: typeof g.vision === 'string' ? g.vision : '',
-        targetDate: isValidDate(g.targetDate) ? new Date(g.targetDate).toISOString() : new Date().toISOString(),
-        linkedProjectId: typeof g.linkedProjectId === 'string' ? g.linkedProjectId : null,
-        imageUrl: typeof g.imageUrl === 'string' ? g.imageUrl : undefined,
-      };
-    }));
-
-    const [habits, setHabits] = useState<Habit[]>(() => validateAndMigrateArray<Habit>('habits', (h: any) => {
-      if (!h || typeof h.id !== 'string') return null;
-      return {
-        id: h.id,
-        name: typeof h.name === 'string' ? h.name : 'New Habit',
-        frequency: h.frequency || 'daily',
-        linkedGoalId: typeof h.linkedGoalId === 'string' ? h.linkedGoalId : null,
-      }
-    }));
-
-    const [habitLogs, setHabitLogs] = useState<HabitLog[]>(() => validateAndMigrateArray<HabitLog>('habitLogs', (l: any) => {
-      if (!l || typeof l.id !== 'string' || typeof l.date !== 'string') return null;
-      return {
-        id: l.id,
-        habitId: typeof l.habitId === 'string' ? l.habitId : '',
-        date: l.date,
-        completed: typeof l.completed === 'boolean' ? l.completed : false,
-      }
-    }));
-
-
+    const [lists, setLists] = useState<List[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [notes, setNotes] = useState<Note[]>([]);
+    const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+    const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([]);
+    const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+    const [goals, setGoals] = useState<Goal[]>([]);
+    const [habits, setHabits] = useState<Habit[]>([]);
+    const [habitLogs, setHabitLogs] = useState<HabitLog[]>([]);
     const [activeSelection, setActiveSelection] = useState<ActiveSelection>({ type: 'dashboard' });
     const [detailItem, setDetailItem] = useState<Task | Note | null>(null);
+    const [isDataLoaded, setIsDataLoaded] = useState(false);
+    const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null);
+    
+    // --- DATA LOADING & VALIDATION ---
+    useEffect(() => {
+        const loadAndValidate = async <T,>(key: string, validator: (item: any) => T | null): Promise<T[]> => {
+            const data = await window.electronStore.get(key);
+            if (!data || !Array.isArray(data)) return [];
+            return data.map(item => {
+                try {
+                    return validator(item);
+                } catch(e) {
+                    console.error(`Skipping corrupted item in ${key}:`, item, e);
+                    return null;
+                }
+            }).filter((i): i is T => i !== null);
+        };
+
+        const loadAllData = async () => {
+            const loadedLists = await loadAndValidate('lists', (l: any): List | null => {
+                if (!l || typeof l.id !== 'string') return null;
+                let statuses = l.statuses;
+                if (l.type === 'task') {
+                    if (!Array.isArray(statuses) || statuses.length === 0) {
+                        statuses = [{ status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Done, name: 'Done' }];
+                    } else if (typeof statuses[0] === 'string') {
+                        statuses = statuses.filter((s: any) => Object.values(Status).includes(s)).map((s: Status) => ({ status: s, name: s }));
+                    }
+                }
+                return { id: l.id, name: l.name || 'Untitled List', color: l.color || '#8b64fd', type: l.type || 'task', defaultView: l.defaultView || 'list', statuses };
+            });
+
+            if (loadedLists.length === 0) {
+                 setLists([
+                    { id: '1', name: 'My Tasks', color: '#8b64fd', type: 'task', defaultView: 'list', statuses: [{ status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Done, name: 'Done' }] },
+                    { id: '2', name: 'Personal', color: '#34D399', type: 'task', defaultView: 'board', statuses: [{ status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Waiting, name: 'Waiting' }, { status: Status.Done, name: 'Done' }] },
+                    { id: '3', name: 'Quick Notes', color: '#FBBF24', type: 'note' },
+                ]);
+            } else {
+                setLists(loadedLists);
+            }
+            
+            setTasks(await loadAndValidate('tasks', (t: any) => {
+                if (!t || typeof t.id !== 'string') return null;
+                return { id: t.id, listId: t.listId || '1', title: t.title || 'Untitled', description: t.description || '', status: Object.values(Status).includes(t.status) ? t.status : Status.ToDo, priority: Object.values(Priority).includes(t.priority) ? t.priority : Priority.Medium, dueDate: isValidDate(t.dueDate) ? new Date(t.dueDate).toISOString() : new Date().toISOString(), tags: t.tags || [], createdAt: isValidDate(t.createdAt) ? new Date(t.createdAt).toISOString() : new Date().toISOString(), attachments: t.attachments || [], checklist: t.checklist || [], comments: t.comments || [] };
+            }));
+            setNotes(await loadAndValidate('notes', (n: any) => {
+                 if (!n || typeof n.id !== 'string') return null;
+                 return { id: n.id, listId: n.listId || '3', title: n.title || 'Untitled', content: n.content || '', tags: n.tags || [], createdAt: isValidDate(n.createdAt) ? new Date(n.createdAt).toISOString() : new Date().toISOString(), updatedAt: isValidDate(n.updatedAt) ? new Date(n.updatedAt).toISOString() : new Date().toISOString(), attachments: n.attachments || [] };
+            }));
+            setSavedFilters(await loadAndValidate('savedFilters', (f: any) => {
+                 if (!f || typeof f.id !== 'string' || typeof f.name !== 'string' || typeof f.filter !== 'object') return null;
+                 return f as SavedFilter;
+            }));
+            setStickyNotes(await loadAndValidate('stickyNotes', (n: any) => {
+                 if (!n || typeof n.id !== 'string' || typeof n.color !== 'string' || typeof n.position?.x !== 'number' || typeof n.position?.y !== 'number') return null;
+                 return n as StickyNote;
+            }));
+            setChatSessions(await loadAndValidate('chatSessions', (s: any) => {
+                 if (!s || typeof s.id !== 'string' || !Array.isArray(s.messages)) return null;
+                 return s as ChatSession;
+            }));
+            setGoals(await loadAndValidate('goals', g => g as Goal));
+            setHabits(await loadAndValidate('habits', h => h as Habit));
+            setHabitLogs(await loadAndValidate('habitLogs', l => l as HabitLog));
+
+            setIsDataLoaded(true);
+        };
+
+        loadAllData();
+    }, []);
 
     // --- LOCALSTORAGE PERSISTENCE ---
-    useEffect(() => { localStorage.setItem('lists', JSON.stringify(lists)); }, [lists]);
-    useEffect(() => { localStorage.setItem('tasks', JSON.stringify(tasks)); }, [tasks]);
-    useEffect(() => { localStorage.setItem('notes', JSON.stringify(notes)); }, [notes]);
-    useEffect(() => { localStorage.setItem('savedFilters', JSON.stringify(savedFilters)); }, [savedFilters]);
-    useEffect(() => { localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes)); }, [stickyNotes]);
-    useEffect(() => { localStorage.setItem('chatHistory', JSON.stringify(chatHistory)); }, [chatHistory]);
-    useEffect(() => { localStorage.setItem('goals', JSON.stringify(goals)); }, [goals]);
-    useEffect(() => { localStorage.setItem('habits', JSON.stringify(habits)); }, [habits]);
-    useEffect(() => { localStorage.setItem('habitLogs', JSON.stringify(habitLogs)); }, [habitLogs]);
-
-
-    // Add default lists if none exist
-    useEffect(() => {
-        if (lists.length === 0) {
-            setLists([
-                { id: '1', name: 'My Tasks', color: '#8b64fd', type: 'task', defaultView: 'list' },
-                { id: '2', name: 'Personal', color: '#34D399', type: 'task', defaultView: 'board' },
-                { id: '3', name: 'Quick Notes', color: '#FBBF24', type: 'note' },
-            ]);
-        }
-    }, []);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('lists', lists); }, [lists, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('tasks', tasks); }, [tasks, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('notes', notes); }, [notes, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('savedFilters', savedFilters); }, [savedFilters, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('stickyNotes', stickyNotes); }, [stickyNotes, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('chatSessions', chatSessions); }, [chatSessions, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('goals', goals); }, [goals, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('habits', habits); }, [habits, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) window.electronStore.set('habitLogs', habitLogs); }, [habitLogs, isDataLoaded]);
     
     // --- HANDLERS ---
-    const handleAddList = (list: Omit<List, 'id'>) => setLists(prev => [...prev, { ...list, id: uuidv4() }]);
+    const handleAddList = (list: Omit<List, 'id' | 'statuses'>) => {
+        const defaultStatuses: ListStatusMapping[] | undefined = list.type === 'task' 
+            ? [
+                { status: Status.ToDo, name: 'To Do' },
+                { status: Status.InProgress, name: 'In Progress' },
+                { status: Status.Done, name: 'Done' }
+              ]
+            : undefined;
+        setLists(prev => [...prev, { ...list, id: uuidv4(), statuses: defaultStatuses }]);
+    };
     const handleUpdateList = (updatedList: List) => setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
     const handleDeleteList = (listId: string) => {
         setLists(prev => prev.filter(l => l.id !== listId));
@@ -236,9 +170,24 @@ const App = () => {
         if (!list || list.type !== type) {
             const fallbackList = lists.find(l => l.type === type);
             if (!fallbackList) {
-                 const newFallbackList = { id: uuidv4(), name: `${type === 'task' ? 'Task' : 'Note'} List`, color: '#8b64fd', type };
-                 handleAddList(newFallbackList);
-                 targetListId = newFallbackList.id;
+                const newId = uuidv4();
+                const defaultStatuses: ListStatusMapping[] | undefined = type === 'task'
+                   ? [
+                       { status: Status.ToDo, name: 'To Do' },
+                       { status: Status.InProgress, name: 'In Progress' },
+                       { status: Status.Done, name: 'Done' }
+                     ]
+                   : undefined;
+                const newFallbackList: List = {
+                    id: newId,
+                    name: `${type === 'task' ? 'Task' : 'Note'} List`,
+                    color: '#8b64fd',
+                    type,
+                    defaultView: 'list',
+                    statuses: defaultStatuses
+                };
+                setLists(prev => [...prev, newFallbackList]);
+                targetListId = newId;
             } else {
                  targetListId = fallbackList.id;
             }
@@ -258,6 +207,7 @@ const App = () => {
                 createdAt: new Date().toISOString(),
                 attachments: item.attachments || [],
                 checklist: item.checklist || [],
+                comments: item.comments || [],
             };
             setTasks(prev => [...prev, newTask]);
             return newTask;
@@ -295,6 +245,29 @@ const App = () => {
        } else {
          setNotes(prev => prev.filter(n => n.id !== itemId));
        }
+    };
+
+    const handleAddComment = (taskId: string, content: string) => {
+      setTasks(prevTasks =>
+        prevTasks.map(task => {
+          if (task.id === taskId) {
+            const newComment: Comment = {
+              id: uuidv4(),
+              content,
+              createdAt: new Date().toISOString(),
+              userName: 'Courtney', // Mocked user
+              avatarUrl: undefined
+            };
+            const updatedTask = { ...task, comments: [...task.comments, newComment] };
+            // Also update the detail item if it's the one being commented on
+            if (detailItem?.id === taskId) {
+                setDetailItem(updatedTask);
+            }
+            return updatedTask;
+          }
+          return task;
+        })
+      );
     };
 
     const handleAddSavedFilter = (name: string, filter: TaskFilter) => {
@@ -378,6 +351,64 @@ const App = () => {
         }
     };
 
+    // --- AI Chat Handlers ---
+    const handleNewChat = () => {
+        setActiveChatSessionId(null);
+    };
+
+    const handleSelectChatSession = (sessionId: string) => {
+        setActiveChatSessionId(sessionId);
+    };
+
+    const handleSendMessage = async (message: string) => {
+        let currentSessionId = activeChatSessionId;
+        let sessionToUpdate: ChatSession;
+        
+        const userMessage: ChatMessage = { id: uuidv4(), role: 'user', text: message };
+
+        if (!currentSessionId) {
+            const newId = uuidv4();
+            sessionToUpdate = {
+                id: newId,
+                title: message.substring(0, 40) + (message.length > 40 ? '...' : ''),
+                messages: [userMessage],
+                createdAt: new Date().toISOString(),
+            };
+            setActiveChatSessionId(newId);
+            setChatSessions(prev => [sessionToUpdate, ...prev]);
+        } else {
+            const existingSession = chatSessions.find(s => s.id === currentSessionId)!;
+            sessionToUpdate = { ...existingSession, messages: [...existingSession.messages, userMessage] };
+            setChatSessions(prev => prev.map(s => (s.id === currentSessionId ? sessionToUpdate : s)));
+        }
+
+        const response = await runChat(sessionToUpdate.messages, message, tasks, lists);
+        let modelMessage: ChatMessage;
+
+        if (response.toolCalls) {
+            const toolResults: any[] = [];
+            let modelResponseText = "I've completed the following actions:";
+
+            for (const toolCall of response.toolCalls) {
+                 if (toolCall.name === 'createTask') {
+                    const task = handleAddItem(toolCall.args, String(toolCall.args.listId), 'task');
+                    toolResults.push({ callId: toolCall.name, toolName: 'createTask', data: task });
+                    modelResponseText = `I've created the task "${task.title}".`;
+                } else if (toolCall.name === 'createNote') {
+                    const note = handleAddItem(toolCall.args, String(toolCall.args.listId), 'note');
+                    toolResults.push({ callId: toolCall.name, toolName: 'createNote', data: note });
+                    modelResponseText = `I've created the note "${note.title}".`;
+                }
+            }
+            // Simplified response for single tool call, can be enhanced for multiple
+            modelMessage = { id: uuidv4(), role: 'model', text: modelResponseText, toolResult: toolResults.length > 0 ? { ...toolResults[0], status: 'ok'} : undefined };
+        } else {
+            modelMessage = { id: uuidv4(), role: 'model', text: response.text || 'Sorry, I could not process that.' };
+        }
+        
+        setChatSessions(prev => prev.map(s => s.id === (currentSessionId || sessionToUpdate.id) ? { ...s, messages: [...sessionToUpdate.messages, modelMessage] } : s));
+    };
+
 
     return (
         <AppLayout
@@ -386,8 +417,11 @@ const App = () => {
             notes={notes}
             savedFilters={savedFilters}
             stickyNotes={stickyNotes}
-            chatHistory={chatHistory}
-            setChatHistory={setChatHistory}
+            chatSessions={chatSessions}
+            activeChatSessionId={activeChatSessionId}
+            onSendMessage={handleSendMessage}
+            onNewChat={handleNewChat}
+            onSelectChatSession={handleSelectChatSession}
             activeSelection={activeSelection}
             onActiveSelectionChange={setActiveSelection}
             detailItem={detailItem}
@@ -398,6 +432,7 @@ const App = () => {
             onAddItem={handleAddItem}
             onUpdateItem={handleUpdateItem}
             onDeleteItem={handleDeleteItem}
+            onAddComment={handleAddComment}
             onAddSavedFilter={handleAddSavedFilter}
             onDeleteSavedFilter={handleDeleteSavedFilter}
             onAddStickyNote={handleAddStickyNote}

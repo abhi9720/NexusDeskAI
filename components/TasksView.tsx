@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Task, Status, Priority, TaskFilter } from '../types';
 import AddTaskModal from './AddTaskModal';
@@ -17,8 +14,11 @@ interface TasksViewProps {
 }
 
 const statusConfig: Record<Status, { title: string, color: string }> = {
+  [Status.Backlog]: { title: 'Backlog', color: 'bg-gray-500' },
   [Status.ToDo]: { title: 'To Do', color: 'bg-blue-500' },
   [Status.InProgress]: { title: 'In Progress', color: 'bg-yellow-500' },
+  [Status.Review]: { title: 'Review', color: 'bg-purple-500' },
+  [Status.Waiting]: { title: 'Waiting', color: 'bg-slate-500' },
   [Status.Done]: { title: 'Done', color: 'bg-green-500' },
 };
 

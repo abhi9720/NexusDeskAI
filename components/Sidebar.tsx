@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { List, Task, Note, ActiveSelection, SavedFilter, TaskFilter } from '../types';
-import { SunIcon, MoonIcon, CalendarDaysIcon, PlusIcon, CogIcon, BellIcon, QuestionMarkCircleIcon, TasksIcon, NotesIcon, DocumentTextIcon, TagIcon, ListBulletIcon, TrashIcon, PencilIcon, MagnifyingGlassIcon, ChevronDoubleRightIcon, StickyNoteIcon, SparklesIcon, DashboardIcon, TrendingUpIcon } from './icons';
+import { List, Task, Note, ActiveSelection, SavedFilter, TaskFilter, Theme } from '../types';
+import { SunIcon, MoonIcon, CalendarDaysIcon, PlusIcon, CogIcon, BellIcon, QuestionMarkCircleIcon, TasksIcon, NotesIcon, DocumentTextIcon, TagIcon, ListBulletIcon, TrashIcon, PencilIcon, MagnifyingGlassIcon, ChevronDoubleRightIcon, StickyNoteIcon, SparklesIcon, DashboardIcon, TrendingUpIcon, ComputerDesktopIcon, UserCircleIcon } from './icons';
 import AddListModal from './AddListModal';
 
 interface SidebarProps {
@@ -21,10 +21,24 @@ interface SidebarProps {
 
 const Sidebar = (props: SidebarProps) => {
     const { lists, tasks, notes, savedFilters, activeSelection, onActiveSelectionChange, onAddList, onUpdateList, onDeleteList, onDeleteSavedFilter, onDetailItemChange } = props;
-    const { isDarkMode, toggleDarkMode } = useTheme();
+    const { theme, setTheme } = useTheme();
     const [isListModalOpen, setIsListModalOpen] = useState(false);
     const [listToEdit, setListToEdit] = useState<List | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+    const themeMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+                setIsThemeMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [themeMenuRef]);
 
     const handleOpenAddModal = () => {
         setListToEdit(null);
@@ -62,14 +76,16 @@ const Sidebar = (props: SidebarProps) => {
             <button
                 onClick={onClick}
                 className={`flex items-center justify-between w-full text-left px-3 py-2 text-sm rounded-lg transition-colors duration-150 ${
-                    isActive ? 'bg-primary/20 text-primary font-semibold' : 'text-gray-400 hover:bg-white/5 dark:hover:bg-gray-700/50 hover:text-white'
+                    isActive
+                        ? 'bg-primary/10 dark:bg-primary/20 text-primary font-semibold'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white'
                 }`}
             >
                 <div className="flex items-center space-x-3">
                     {icon}
                     <span className="truncate">{label}</span>
                 </div>
-                {count !== undefined && <span className="text-xs font-mono bg-gray-700 rounded-full px-2 py-0.5">{count}</span>}
+                {count !== undefined && <span className="text-xs font-mono bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5">{count}</span>}
             </button>
             <div className="flex items-center pl-1">
                 {onEdit && (
@@ -85,15 +101,27 @@ const Sidebar = (props: SidebarProps) => {
             </div>
         </div>
     );
+    
+    const themeOptions: { value: Theme, label: string, icon: JSX.Element }[] = [
+        { value: 'light', label: 'Light', icon: <SunIcon className="w-5 h-5"/> },
+        { value: 'dark', label: 'Dark', icon: <MoonIcon className="w-5 h-5"/> },
+        { value: 'system', label: 'System', icon: <ComputerDesktopIcon className="w-5 h-5"/> },
+    ];
+    
+    const currentThemeIcon = {
+        light: <SunIcon className="w-5 h-5"/>,
+        dark: <MoonIcon className="w-5 h-5"/>,
+        system: <ComputerDesktopIcon className="w-5 h-5"/>,
+    }[theme];
 
     return (
         <>
-            <aside className="w-72 bg-sidebar-dark flex flex-col p-4 flex-shrink-0">
+            <aside className="w-72 bg-gray-50 dark:bg-sidebar-dark flex flex-col p-4 flex-shrink-0 border-r border-gray-200 dark:border-r-transparent">
                 <div className="flex items-center space-x-2 p-2 mb-4">
                      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                         <SparklesIcon className="w-5 h-5 text-white" />
                     </div>
-                    <h1 className="text-xl font-bold text-white">TaskFlow AI</h1>
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">TaskFlow AI</h1>
                 </div>
 
                 <div className="relative mb-4">
@@ -103,7 +131,7 @@ const Sidebar = (props: SidebarProps) => {
                         placeholder="Search..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm text-white focus:ring-2 focus:ring-primary focus:border-primary"
+                        className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary"
                     />
                 </div>
 
@@ -111,7 +139,7 @@ const Sidebar = (props: SidebarProps) => {
                     <div className="space-y-1">
                          <button 
                           onClick={() => handleSelection({ type: 'ai-chat' })}
-                          className={`w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-150 mb-2 animate-pulse-subtle ${activeSelection.type === 'ai-chat' ? 'bg-primary/20 text-primary font-semibold' : 'bg-primary/10 text-primary-light hover:bg-primary/20'}`}>
+                          className={`w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-150 mb-2 animate-pulse-subtle ${activeSelection.type === 'ai-chat' ? 'bg-primary/10 dark:bg-primary/20 text-primary font-semibold' : 'bg-primary/10 text-primary-dark dark:text-primary-light hover:bg-primary/20'}`}>
                           <SparklesIcon className="w-5 h-5" />
                           <span>Prodify AI</span>
                         </button>
@@ -125,8 +153,8 @@ const Sidebar = (props: SidebarProps) => {
 
                     <div className="pt-4">
                         <div className="flex items-center justify-between px-3 pb-1">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Task Lists</h3>
-                             <button onClick={handleOpenAddModal} className="p-1 rounded-md text-gray-500 hover:text-primary hover:bg-primary/10">
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Task Lists</h3>
+                             <button onClick={handleOpenAddModal} className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary/10">
                                  <PlusIcon className="w-4 h-4" />
                              </button>
                         </div>
@@ -136,7 +164,7 @@ const Sidebar = (props: SidebarProps) => {
                     </div>
                      <div className="pt-4">
                         <div className="flex items-center justify-between px-3 pb-1">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Note Lists</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Note Lists</h3>
                         </div>
                         {noteLists.map(list => (
                             <NavItem key={list.id} icon={<span className="w-5 h-5 flex items-center justify-center"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: list.color}}></span></span>} label={list.name} count={notes.filter(n => n.listId === list.id).length} isActive={activeSelection.type === 'list' && activeSelection.id === list.id} onClick={() => handleSelection({ type: 'list', id: list.id })} onEdit={(e) => { e.stopPropagation(); handleOpenEditModal(list); }} onDelete={(e) => { e.stopPropagation(); handleDeleteList(list); }}/>
@@ -144,7 +172,7 @@ const Sidebar = (props: SidebarProps) => {
                     </div>
                     {savedFilters.length > 0 && (
                         <div className="pt-4">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 pb-1">Saved Filters</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3 pb-1">Saved Filters</h3>
                             {savedFilters.map(filter => (
                                 <NavItem 
                                     key={filter.id}
@@ -159,7 +187,7 @@ const Sidebar = (props: SidebarProps) => {
                     )}
                     {tags.length > 0 && (
                         <div className="pt-4">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 pb-1">Tags</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3 pb-1">Tags</h3>
                             {tags.map(tag => (
                                 <NavItem 
                                     key={tag}
@@ -173,15 +201,47 @@ const Sidebar = (props: SidebarProps) => {
                     )}
                 </nav>
                 
-                <div className="flex-shrink-0 pt-4 border-t border-gray-700/50 flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                        <button className="p-2 rounded-full text-gray-400 hover:bg-gray-700"><BellIcon className="w-5 h-5"/></button>
-                        <button className="p-2 rounded-full text-gray-400 hover:bg-gray-700"><QuestionMarkCircleIcon className="w-5 h-5"/></button>
-                        <button className="p-2 rounded-full text-gray-400 hover:bg-gray-700"><CogIcon className="w-5 h-5"/></button>
+                <div className="flex-shrink-0 pt-4 border-t border-gray-200 dark:border-gray-700/50">
+                    <div className="flex items-center justify-between px-3">
+                        <div className="flex items-center space-x-3">
+                            <UserCircleIcon className="w-8 h-8 text-gray-500" />
+                            <div>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-white">Courtney</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">courtney@prodify.ai</p>
+                            </div>
+                        </div>
+                        <div className="relative" ref={themeMenuRef}>
+                            <button onClick={() => setIsThemeMenuOpen(prev => !prev)} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200" aria-label="Toggle theme menu">
+                                {currentThemeIcon}
+                            </button>
+                            {isThemeMenuOpen && (
+                                <div className="absolute bottom-full mb-2 right-0 w-36 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10 animate-fade-in">
+                                    {themeOptions.map(option => (
+                                        <button
+                                            key={option.value}
+                                            onClick={() => {
+                                                setTheme(option.value);
+                                                setIsThemeMenuOpen(false);
+                                            }}
+                                            className={`w-full flex items-center space-x-3 px-3 py-2 text-sm text-left ${
+                                                theme === option.value
+                                                    ? 'text-primary font-semibold'
+                                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                            }`}
+                                        >
+                                            {option.icon}
+                                            <span>{option.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <button onClick={toggleDarkMode} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 transition-colors duration-200" aria-label="Toggle dark mode">
-                        {isDarkMode ? <SunIcon className="w-5 h-5" /> : <MoonIcon className="w-5 h-5" />}
-                    </button>
+                    <div className="mt-4 px-3">
+                        <a href="https://github.com/abhi9720" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light transition-colors">
+                            Built by <strong>abhi9720</strong>
+                        </a>
+                    </div>
                 </div>
             </aside>
              <AddListModal

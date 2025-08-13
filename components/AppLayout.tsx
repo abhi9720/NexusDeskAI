@@ -2,10 +2,9 @@ import React from 'react';
 import Sidebar from './Sidebar';
 import MainContentView from './MainContentView';
 import DetailPane from './DetailPane';
-import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, TaskFilter, ChatMessage, Goal, Habit, HabitLog } from '../types';
+import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, TaskFilter, ChatSession, Goal, Habit, HabitLog, Comment } from '../types';
 import StickyNotesView from './StickyNotesView';
 import AIChatView from './AIChatView';
-import { useTheme } from '../context/ThemeContext';
 import DashboardView from './DashboardView';
 import MomentumView from './MomentumView';
 
@@ -15,18 +14,22 @@ interface AppLayoutProps {
   notes: Note[];
   savedFilters: SavedFilter[];
   stickyNotes: StickyNote[];
-  chatHistory: ChatMessage[];
-  setChatHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  chatSessions: ChatSession[];
+  activeChatSessionId: string | null;
+  onSendMessage: (message: string) => Promise<void>;
+  onNewChat: () => void;
+  onSelectChatSession: (sessionId: string) => void;
   activeSelection: ActiveSelection;
   onActiveSelectionChange: (selection: ActiveSelection) => void;
   detailItem: Task | Note | null;
   onDetailItemChange: (item: Task | Note | null) => void;
-  onAddList: (list: Omit<List, 'id'>) => void;
+  onAddList: (list: Omit<List, 'id' | 'statuses'>) => void;
   onUpdateList: (list: List) => void;
   onDeleteList: (listId: string) => void;
   onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Task | Note;
   onUpdateItem: (item: Task | Note) => void;
   onDeleteItem: (itemId: string, type: 'task' | 'note') => void;
+  onAddComment: (taskId: string, content: string) => void;
   onAddSavedFilter: (name: string, filter: TaskFilter) => void;
   onDeleteSavedFilter: (filterId: string) => void;
   onAddStickyNote: () => void;
@@ -44,7 +47,6 @@ interface AppLayoutProps {
 
 const AppLayout = (props: AppLayoutProps) => {
   const { detailItem, onDetailItemChange, activeSelection } = props;
-  const { isDarkMode } = useTheme();
 
   const renderContent = () => {
     switch (activeSelection.type) {
@@ -57,9 +59,15 @@ const AppLayout = (props: AppLayoutProps) => {
             onActiveSelectionChange={props.onActiveSelectionChange}
           />;
       case 'ai-chat':
+        const activeSession = props.activeChatSessionId
+            ? props.chatSessions.find(s => s.id === props.activeChatSessionId)
+            : null;
         return <AIChatView 
-                  history={props.chatHistory} 
-                  setHistory={props.setChatHistory}
+                  activeSession={activeSession || null}
+                  sessions={props.chatSessions}
+                  onSendMessage={props.onSendMessage}
+                  onNewChat={props.onNewChat}
+                  onSelectChatSession={props.onSelectChatSession}
                   onAddItem={props.onAddItem}
                   onDetailItemChange={onDetailItemChange}
                   onActiveSelectionChange={props.onActiveSelectionChange}
@@ -96,12 +104,13 @@ const AppLayout = (props: AppLayoutProps) => {
               onUpdateItem={props.onUpdateItem}
               onAddSavedFilter={props.onAddSavedFilter}
               onAddItem={props.onAddItem}
+              onUpdateList={props.onUpdateList}
           />;
     }
   };
 
   return (
-    <div className={`h-screen w-screen flex text-gray-800 dark:text-gray-200 ${isDarkMode ? 'dark' : ''}`}>
+    <div className="h-screen w-screen flex">
       <Sidebar 
         lists={props.lists}
         tasks={props.tasks}
@@ -119,13 +128,21 @@ const AppLayout = (props: AppLayoutProps) => {
         {renderContent()}
       </main>
       {detailItem && (
-        <DetailPane
-            item={detailItem}
-            onClose={() => onDetailItemChange(null)}
-            onUpdate={props.onUpdateItem}
-            onDelete={props.onDeleteItem}
-            key={detailItem.id}
-        />
+        <>
+          <div
+            onClick={() => onDetailItemChange(null)}
+            className="fixed inset-0 bg-black/20 z-30 animate-fade-in-overlay"
+            aria-hidden="true"
+          />
+          <DetailPane
+              item={detailItem}
+              onClose={() => onDetailItemChange(null)}
+              onUpdate={props.onUpdateItem}
+              onDelete={props.onDeleteItem}
+              onAddComment={props.onAddComment}
+              key={detailItem.id}
+          />
+        </>
       )}
     </div>
   );

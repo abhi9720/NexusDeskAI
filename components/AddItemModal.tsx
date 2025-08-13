@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, Note, Priority, Attachment, ChecklistItem } from '../types';
@@ -16,15 +14,16 @@ interface AddItemModalProps {
 }
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
+    const srcUrl = `safe-file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <img src={attachment.url} alt={attachment.name} className="max-h-20 rounded-md object-contain"/>;
+            return <img src={srcUrl} alt={attachment.name} className="max-h-20 rounded-md object-contain" />;
         }
         if (attachment.type.startsWith('video/')) {
-            return <video src={attachment.url} controls className="max-h-20 rounded-md" />;
+            return <video src={srcUrl} controls className="max-h-20 rounded-md" />;
         }
         if (attachment.type.startsWith('audio/')) {
-            return <audio src={attachment.url} controls className="w-full text-xs" />;
+            return <audio src={srcUrl} controls className="w-full text-xs" />;
         }
         return <div className="flex items-center space-x-2 text-xs"><PaperClipIcon className="w-4 h-4"/> <span>{attachment.name}</span></div>;
     };
@@ -70,22 +69,35 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
 
   if (!isOpen) return null;
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
+        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
       for (const file of Array.from(files)) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-              const newAttachment: Attachment = {
-                  id: uuidv4(),
-                  name: file.name,
-                  type: file.type,
-                  url: event.target?.result as string,
-              };
-              setAttachments(prev => [...prev, newAttachment]);
+          if (file.size > MAX_FILE_SIZE) {
+              alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+              continue;
+          }
+
+          //   const buffer = await file.arrayBuffer();
+          //   const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
+          //     name: file.name,
+          //     buffer: new Uint8Array(buffer),
+          //   });
+          const buffer = await file.arrayBuffer();
+          const savedPath = await window.electronStore.saveAttachment({
+              name: file.name,
+              buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
+          });
+
+          const newAttachment: Attachment = {
+              id: uuidv4(),
+              name: file.name,
+              type: file.type,
+              url: savedPath,
           };
-          reader.readAsDataURL(file);
+          setAttachments(prev => [...prev, newAttachment]);
       }
   };
 

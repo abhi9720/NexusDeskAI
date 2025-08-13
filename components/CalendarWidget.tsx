@@ -10,7 +10,7 @@ import {
   isToday,
   addDays,
 } from 'date-fns';
-import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisHorizontalIcon, VideoIcon } from './icons';
+import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisHorizontalIcon, VideoIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon } from './icons';
 
 interface CalendarWidgetProps {
   tasks: Task[];
@@ -33,6 +33,26 @@ const TaskEventCard = ({ task, onClick }: { task: Task; onClick: (task: Task) =>
         <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 ml-2">
           <EllipsisHorizontalIcon className="w-5 h-5" />
         </button>
+      </div>
+       <div className="flex items-center space-x-3 text-xs text-gray-400 dark:text-gray-500 mt-2 pt-2 border-t border-gray-200/80 dark:border-gray-700/60">
+          {task.comments?.length > 0 && (
+              <div className="flex items-center gap-1">
+                  <ChatBubbleLeftEllipsisIcon className="w-4 h-4" />
+                  <span>{task.comments.length}</span>
+              </div>
+          )}
+          {task.attachments?.length > 0 && (
+              <div className="flex items-center gap-1">
+                  <PaperClipIcon className="w-4 h-4" />
+                  <span>{task.attachments.length}</span>
+              </div>
+          )}
+          {task.checklist?.length > 0 && (
+              <div className="flex items-center gap-1">
+                  <ListBulletIcon className="w-4 h-4" />
+                  <span>{task.checklist.filter(i => i.completed).length}/{task.checklist.length}</span>
+              </div>
+          )}
       </div>
       
       {task.tags.includes('meeting') && (

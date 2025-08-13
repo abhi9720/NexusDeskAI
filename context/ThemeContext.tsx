@@ -1,37 +1,62 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { Theme } from '../types';
 
 interface ThemeContextType {
-    isDarkMode: boolean;
-    toggleDarkMode: () => void;
+    theme: Theme;
+    setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            const stored = localStorage.getItem('darkMode');
-            if (stored === null && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                return true;
-            }
-            return stored === 'true';
-        }
-        return false;
-    });
+    const [theme, setTheme] = useState<Theme>('system');
 
     useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-        localStorage.setItem('darkMode', String(isDarkMode));
-    }, [isDarkMode]);
+        const fetchTheme = async () => {
+            const savedTheme = await window.electronStore.get('theme') as Theme | null;
+            if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
+                setTheme(savedTheme);
+            }
+        };
+        fetchTheme();
+    }, []);
 
-    const toggleDarkMode = () => setIsDarkMode(prev => !prev);
-    
+    useEffect(() => {
+        window.electronStore.set('theme', theme);
+        const root = window.document.documentElement;
+        
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        
+        const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+            if (theme === 'system') {
+                if (e.matches) {
+                    root.classList.add('dark');
+                } else {
+                    root.classList.remove('dark');
+                }
+            }
+        };
+
+        if (theme === 'dark') {
+            root.classList.add('dark');
+        } else if (theme === 'light') {
+            root.classList.remove('dark');
+        } else { // 'system'
+            if (mediaQuery.matches) {
+                root.classList.add('dark');
+            } else {
+                root.classList.remove('dark');
+            }
+            mediaQuery.addEventListener('change', handleSystemThemeChange);
+        }
+        
+        return () => {
+            mediaQuery.removeEventListener('change', handleSystemThemeChange);
+        };
+    }, [theme]);
+
     return (
-        <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
+        <ThemeContext.Provider value={{ theme, setTheme }}>
             {children}
         </ThemeContext.Provider>
     );

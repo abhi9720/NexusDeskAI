@@ -10,15 +10,16 @@ interface AddTaskModalProps {
 }
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
+  const srcUrl = `safe-file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <img src={attachment.url} alt={attachment.name} className="max-h-24 rounded-md object-contain"/>;
+          return <img src={srcUrl} alt={attachment.name} className="max-h-24 rounded-md object-contain" />;
         }
         if (attachment.type.startsWith('video/')) {
-            return <video src={attachment.url} controls className="max-h-24 rounded-md" />;
+          return <video src={srcUrl} controls className="max-h-24 rounded-md" />;
         }
         if (attachment.type.startsWith('audio/')) {
-            return <audio src={attachment.url} controls className="w-full" />;
+          return <audio src={srcUrl} controls className="w-full" />;
         }
         return <div className="flex items-center space-x-2 text-sm"><PaperClipIcon className="w-5 h-5"/> <span>{attachment.name}</span></div>;
     };
@@ -65,22 +66,35 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'photo' | 'video' | 'audio' | 'file') => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
+    const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 
       for (const file of Array.from(files)) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-              const newAttachment: Attachment = {
-                  id: uuidv4(),
-                  name: file.name,
-                  type: file.type,
-                  url: event.target?.result as string,
-              };
-              setAttachments(prev => [...prev, newAttachment]);
-          };
-          reader.readAsDataURL(file);
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+          continue;
+        }
+
+        // const buffer = await file.arrayBuffer();
+        // const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
+        //   name: file.name,
+        //   buffer: new Uint8Array(buffer),
+        // });
+        const buffer = await file.arrayBuffer();
+        const savedPath = await window.electronStore.saveAttachment({
+          name: file.name,
+          buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
+        });
+
+        const newAttachment: Attachment = {
+          id: uuidv4(),
+          name: file.name,
+          type: file.type,
+          url: savedPath,
+        };
+        setAttachments(prev => [...prev, newAttachment]);
       }
   };
   
@@ -141,23 +155,22 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
         finalChecklist.push(newItem);
     }
 
-    onAddTask({ listId: '1', title, description, dueDate, priority, tags, attachments, checklist: finalChecklist });
+    onAddTask({ listId: '1', title, description, dueDate, priority, tags, attachments, checklist: finalChecklist, comments: [] });
     onClose();
   };
 
   const actionButtons: {
     label: string;
-    type: 'photo' | 'video' | 'audio' | 'file';
     icon: JSX.Element;
     ref: React.RefObject<HTMLInputElement>;
     accept: string;
     capture?: 'user' | 'environment';
     multiple?: boolean;
   }[] = [
-      { label: 'Click photo', type: 'photo', icon: <CameraIcon className="w-5 h-5"/>, ref: photoInputRef, accept: 'image/*', capture: 'environment' },
-      { label: 'Attach files', type: 'file', icon: <PaperClipIcon className="w-5 h-5"/>, ref: fileInputRef, accept: '*', multiple: true },
-      { label: 'Record video', type: 'video', icon: <VideoIcon className="w-5 h-5"/>, ref: videoInputRef, accept: 'video/*' },
-      { label: 'Record Audio', type: 'audio', icon: <MicrophoneIcon className="w-5 h-5"/>, ref: audioInputRef, accept: 'audio/*' },
+      { label: 'Click photo', icon: <CameraIcon className="w-5 h-5" />, ref: photoInputRef, accept: 'image/*', capture: 'environment' },
+      { label: 'Attach files', icon: <PaperClipIcon className="w-5 h-5" />, ref: fileInputRef, accept: '*', multiple: true },
+      { label: 'Record video', icon: <VideoIcon className="w-5 h-5" />, ref: videoInputRef, accept: 'video/*' },
+      { label: 'Record Audio', icon: <MicrophoneIcon className="w-5 h-5" />, ref: audioInputRef, accept: 'audio/*' },
   ];
 
   return (
@@ -257,7 +270,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
                                 accept={btn.accept}
                                 capture={btn.capture}
                                 multiple={btn.multiple}
-                                onChange={(e) => handleFileChange(e, btn.type)}
+                        onChange={handleFileChange}
                                 className="hidden"
                             />
                       </div>

@@ -6,14 +6,11 @@ interface TaskFilterBarProps {
     filter: TaskFilter;
     onFilterChange: React.Dispatch<React.SetStateAction<TaskFilter>>;
     onSaveFilter: () => void;
+    onClose: () => void;
 }
 
-const TaskFilterBar = ({ filter, onFilterChange, onSaveFilter }: TaskFilterBarProps) => {
+const TaskFilterBar = ({ filter, onFilterChange, onSaveFilter, onClose }: TaskFilterBarProps) => {
     
-    const clearFilters = () => {
-        onFilterChange({ status: 'all', priority: 'all', keyword: '', overdue: false });
-    }
-
     return (
         <div className="flex-shrink-0 flex flex-wrap gap-4 w-full p-3 bg-gray-100/50 dark:bg-gray-800/20 items-center border-b border-gray-200 dark:border-gray-700/80">
             <input 
@@ -45,7 +42,7 @@ const TaskFilterBar = ({ filter, onFilterChange, onSaveFilter }: TaskFilterBarPr
             <button onClick={onSaveFilter} className="px-3 py-2 text-sm text-primary bg-primary/10 hover:bg-primary/20 rounded-lg font-semibold transition-colors">
                 Save Filter
             </button>
-            <button onClick={clearFilters} className="p-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">
                 <XMarkIcon className="w-4 h-4" />
             </button>
         </div>

@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Note, NoteAnalysis, Attachment } from '../types';
@@ -18,17 +15,18 @@ interface NoteModalProps {
 }
 
 const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: string) => void, isPreview: boolean }) => {
+    const srcUrl = `safe-file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <a href={attachment.url} target="_blank" rel="noopener noreferrer"><img src={attachment.url} alt={attachment.name} className="max-h-24 rounded-md object-contain"/></a>;
+            return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-24 rounded-md object-contain" /></a>;
         }
         if (attachment.type.startsWith('video/')) {
-            return <video src={attachment.url} controls className="max-h-24 rounded-md" />;
+            return <video src={srcUrl} controls className="max-h-24 rounded-md" />;
         }
         if (attachment.type.startsWith('audio/')) {
-            return <audio src={attachment.url} controls className="w-full" />;
+            return <audio src={srcUrl} controls className="w-full" />;
         }
-        return <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5"/> <span>{attachment.name}</span></a>;
+        return <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5" /> <span>{attachment.name}</span></a>;
     };
 
     return (
@@ -84,22 +82,34 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
 
   if (!isOpen) return null;
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
+        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
       for (const file of Array.from(files)) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-              const newAttachment: Attachment = {
-                  id: uuidv4(),
-                  name: file.name,
-                  type: file.type,
-                  url: event.target?.result as string,
-              };
-              setAttachments(prev => [...prev, newAttachment]);
+          if (file.size > MAX_FILE_SIZE) {
+              alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+              continue;
+          }
+          //   const buffer = await file.arrayBuffer();
+          //   const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
+          //     name: file.name,
+          //     buffer: new Uint8Array(buffer),
+          //   });
+          const buffer = await file.arrayBuffer();
+          const savedPath = await window.electronStore.saveAttachment({
+              name: file.name,
+              buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
+          });
+
+          const newAttachment: Attachment = {
+              id: uuidv4(),
+              name: file.name,
+              type: file.type,
+              url: savedPath,
           };
-          reader.readAsDataURL(file);
+          setAttachments(prev => [...prev, newAttachment]);
       }
       setActiveTab('write');
   };
