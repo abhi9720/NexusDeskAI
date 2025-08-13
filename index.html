@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskFlow AI</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'brand-light': '#F9FAFB',
+              'brand-dark': '#1F2937',
+              'sidebar-dark': '#111827',
+              'primary': {
+                DEFAULT: '#8b64fd',
+                'light': '#a78bfb',
+                'dark': '#7c3aed',
+              },
+              secondary: '#10B981',
+              accent: '#EC4899',
+            },
+            keyframes: {
+              'fade-in': {
+                '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+               'slide-in-right': {
+                '0%': { transform: 'translateX(100%)', opacity: '0' },
+                '100%': { transform: 'translateX(0)', opacity: '1' },
+              },
+              'pulse-subtle': {
+                '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+                '50%': { transform: 'scale(1.02)', opacity: '0.95' },
+              }
+            },
+            animation: {
+              'fade-in': 'fade-in 0.5s ease-out forwards',
+              'slide-in-right': 'slide-in-right 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
+              'pulse-subtle': 'pulse-subtle 3s ease-in-out infinite',
+            },
+             typography: (theme) => ({
+              DEFAULT: {
+                css: {
+                  color: theme('colors.gray.700'),
+                  a: {
+                    color: theme('colors.primary.DEFAULT'),
+                    '&:hover': {
+                      color: theme('colors.primary.dark'),
+                    },
+                  },
+                  'h1, h2, h3, h4': {
+                    color: theme('colors.gray.900'),
+                  },
+                  '--tw-prose-body': theme('colors.gray[700]'),
+                  '--tw-prose-headings': theme('colors.gray[900]'),
+                  '--tw-prose-bold': theme('colors.gray[900]'),
+                  '--tw-prose-invert-body': theme('colors.gray[300]'),
+                  '--tw-prose-invert-headings': theme('colors.white'),
+                  '--tw-prose-invert-bold': theme('colors.white'),
+                  'code::before': { content: '"" !important' },
+                  'code::after': { content: '"" !important' },
+                  code: {
+                    backgroundColor: theme('colors.gray.100'),
+                    padding: '0.2em 0.4em',
+                    margin: '0',
+                    fontSize: '85%',
+                    borderRadius: '0.25rem',
+                  },
+                  'pre > code': {
+                    backgroundColor: 'transparent',
+                    padding: '0',
+                    margin: '0',
+                    fontSize: '100%',
+                    borderRadius: '0',
+                  },
+                  pre: {
+                    backgroundColor: theme('colors.gray.900'),
+                    color: theme('colors.gray.100'),
+                  },
+                  '--tw-prose-invert-pre-bg': theme('colors.gray.800'),
+                  '--tw-prose-invert-code': theme('colors.pink.300'),
+                },
+              },
+            }),
+          },
+        },
+      };
+    </script>
+    
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
+    "uuid": "https://esm.sh/uuid@^10.0.0",
+    "marked": "https://esm.sh/marked@^13.0.2",
+    "date-fns": "https://esm.sh/date-fns@^3.6.0"
+  }
+}
+</script>
+<script>
+  // Polyfill process.env for browser environment and set API Key
+  window.process = {
+    env: {
+      API_KEY: "AIzaSyD7an3fksZlbqAzOaISmcjqAaL0fBCx3XI"
+    }
+  };
+</script>
+<script type="module" src="/index.tsx"></script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-brand-light dark:bg-sidebar-dark font-sans text-gray-800 dark:text-gray-200 overflow-hidden">
+    <div id="root"></div>
+  </body>
+</html>
