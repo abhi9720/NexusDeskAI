@@ -4,6 +4,7 @@ import { Note, NoteAnalysis, Attachment } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, TagIcon, CameraIcon, VideoIcon, MicrophoneIcon, PaperClipIcon } from './icons';
 import { summarizeAndTagNote } from '../services/geminiService';
 import RichTextEditor from './RichTextEditor';
+import { fileService } from '../services/storageService';
 
 interface NoteModalProps {
   isOpen: boolean;
@@ -15,10 +16,10 @@ interface NoteModalProps {
 }
 
 const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: string) => void, isPreview: boolean }) => {
-    const srcUrl = `safe-file://${attachment.url}`;
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-24 rounded-md object-contain" /></a>;
+            return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-24 rounded-md object-contain"/></a>;
         }
         if (attachment.type.startsWith('video/')) {
             return <video src={srcUrl} controls className="max-h-24 rounded-md" />;
@@ -26,7 +27,7 @@ const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: At
         if (attachment.type.startsWith('audio/')) {
             return <audio src={srcUrl} controls className="w-full" />;
         }
-        return <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5" /> <span>{attachment.name}</span></a>;
+        return <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5"/> <span>{attachment.name}</span></a>;
     };
 
     return (
@@ -82,32 +83,23 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
 
   if (!isOpen) return null;
   
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+      const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
       for (const file of Array.from(files)) {
           if (file.size > MAX_FILE_SIZE) {
-              alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
-              continue;
+            alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+            continue;
           }
-          //   const buffer = await file.arrayBuffer();
-          //   const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
-          //     name: file.name,
-          //     buffer: new Uint8Array(buffer),
-          //   });
-          const buffer = await file.arrayBuffer();
-          const savedPath = await window.electronStore.saveAttachment({
-              name: file.name,
-              buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
-          });
+          const savedPathOrDataUrl = await fileService.saveAttachment(file);
 
           const newAttachment: Attachment = {
               id: uuidv4(),
               name: file.name,
               type: file.type,
-              url: savedPath,
+              url: savedPathOrDataUrl,
           };
           setAttachments(prev => [...prev, newAttachment]);
       }

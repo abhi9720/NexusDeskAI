@@ -72,7 +72,8 @@ export type ActiveSelection =
   | { type: 'saved-filter', id: string }
   | { type: 'calendar' }
   | { type: 'ai-chat' }
-  | { type: 'momentum' };
+  | { type: 'momentum' }
+  | { type: 'settings' };
 
 // --- Core Data Models (Updated) ---
 export enum Priority {
@@ -144,6 +145,7 @@ export interface Subtask {
 }
 
 export interface TaskAnalysis {
+  summary: string;
   complexity: string;
   requiredSkills: string[];
   potentialBlockers: string[];

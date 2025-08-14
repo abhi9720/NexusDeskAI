@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import AppLayout from './components/AppLayout';
+import OnboardingFlow from './components/OnboardingFlow';
 import {
   List,
   Task,
@@ -22,18 +23,15 @@ import {
   Comment,
 } from './types';
 import { isDate, format } from 'date-fns';
-import { runChat } from './services/geminiService';
+import { runChat, initializeAi } from './services/geminiService';
+import { storageService } from './services/storageService';
 
 declare global {
     interface Window {
         electronStore: {
             get: (key: string) => Promise<any>;
             set: (key: string, value: any) => void;
-        };
-        electron: {
-            ipcRenderer: {
-                invoke: (channel: string, ...args: any[]) => Promise<any>;
-            };
+            saveAttachment: (file: { name: string, buffer: Uint8Array }) => Promise<string>;
         };
     }
 }
@@ -56,12 +54,49 @@ const App = () => {
     const [activeSelection, setActiveSelection] = useState<ActiveSelection>({ type: 'dashboard' });
     const [detailItem, setDetailItem] = useState<Task | Note | null>(null);
     const [isDataLoaded, setIsDataLoaded] = useState(false);
+    const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
     const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null);
+    const [userName, setUserName] = useState('User');
+    const [apiKey, setApiKey] = useState<string | null>(null);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isTaskParserOpen, setIsTaskParserOpen] = useState(false);
     
+    // --- GLOBAL KEYBOARD SHORTCUTS ---
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+                event.preventDefault();
+                setIsSearchOpen(prev => !prev);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, []);
+
     // --- DATA LOADING & VALIDATION ---
     useEffect(() => {
+        const checkOnboarding = async () => {
+            const onboardingDone = await storageService.get('onboardingComplete');
+            if (onboardingDone) {
+                setIsOnboardingComplete(true);
+                const storedName = await storageService.get('userName') || 'User';
+                const storedKey = await storageService.get('apiKey');
+                setUserName(storedName);
+                setApiKey(storedKey);
+                initializeAi(storedKey);
+                 loadAllData();
+            } else {
+                 setIsDataLoaded(true); // Allow onboarding to show without loading all data
+            }
+           
+        }
+
         const loadAndValidate = async <T,>(key: string, validator: (item: any) => T | null): Promise<T[]> => {
-            const data = await window.electronStore.get(key);
+            const data = await storageService.get(key);
             if (!data || !Array.isArray(data)) return [];
             return data.map(item => {
                 try {
@@ -124,19 +159,21 @@ const App = () => {
             setIsDataLoaded(true);
         };
 
-        loadAllData();
+        checkOnboarding();
     }, []);
 
     // --- LOCALSTORAGE PERSISTENCE ---
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('lists', lists); }, [lists, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('tasks', tasks); }, [tasks, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('notes', notes); }, [notes, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('savedFilters', savedFilters); }, [savedFilters, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('stickyNotes', stickyNotes); }, [stickyNotes, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('chatSessions', chatSessions); }, [chatSessions, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('goals', goals); }, [goals, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('habits', habits); }, [habits, isDataLoaded]);
-    useEffect(() => { if(isDataLoaded) window.electronStore.set('habitLogs', habitLogs); }, [habitLogs, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('lists', lists); }, [lists, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('tasks', tasks); }, [tasks, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('notes', notes); }, [notes, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('savedFilters', savedFilters); }, [savedFilters, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('stickyNotes', stickyNotes); }, [stickyNotes, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('chatSessions', chatSessions); }, [chatSessions, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('goals', goals); }, [goals, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('habits', habits); }, [habits, isDataLoaded]);
+    useEffect(() => { if(isDataLoaded) storageService.set('habitLogs', habitLogs); }, [habitLogs, isDataLoaded]);
+    useEffect(() => { if(isOnboardingComplete) storageService.set('userName', userName); }, [userName, isOnboardingComplete]);
+    useEffect(() => { if(isOnboardingComplete) storageService.set('apiKey', apiKey); }, [apiKey, isOnboardingComplete]);
     
     // --- HANDLERS ---
     const handleAddList = (list: Omit<List, 'id' | 'statuses'>) => {
@@ -255,7 +292,7 @@ const App = () => {
               id: uuidv4(),
               content,
               createdAt: new Date().toISOString(),
-              userName: 'Courtney', // Mocked user
+              userName: userName,
               avatarUrl: undefined
             };
             const updatedTask = { ...task, comments: [...task.comments, newComment] };
@@ -409,6 +446,35 @@ const App = () => {
         setChatSessions(prev => prev.map(s => s.id === (currentSessionId || sessionToUpdate.id) ? { ...s, messages: [...sessionToUpdate.messages, modelMessage] } : s));
     };
 
+    const handleOnboardingComplete = (details: { userName: string; apiKey?: string }) => {
+        setUserName(details.userName);
+        if (details.apiKey) {
+            setApiKey(details.apiKey);
+            initializeAi(details.apiKey);
+        }
+        storageService.set('onboardingComplete', true);
+        storageService.set('userName', details.userName);
+        storageService.set('apiKey', details.apiKey || null);
+        setIsOnboardingComplete(true);
+    };
+
+    const handleUpdateUser = (name: string) => {
+        setUserName(name);
+    };
+
+    const handleUpdateApiKey = (key: string) => {
+        setApiKey(key);
+        initializeAi(key);
+    };
+
+    if (!isDataLoaded) {
+        return <div className="w-screen h-screen bg-brand-light dark:bg-sidebar-dark flex items-center justify-center"><div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
+    }
+
+    if (!isOnboardingComplete) {
+        return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+    }
+
 
     return (
         <AppLayout
@@ -446,6 +512,14 @@ const App = () => {
             onUpsertHabit={handleUpsertHabit}
             onDeleteHabit={handleDeleteHabit}
             onToggleHabitLog={handleToggleHabitLog}
+            userName={userName}
+            apiKey={apiKey}
+            onUpdateUser={handleUpdateUser}
+            onUpdateApiKey={handleUpdateApiKey}
+            isSearchOpen={isSearchOpen}
+            setIsSearchOpen={setIsSearchOpen}
+            isTaskParserOpen={isTaskParserOpen}
+            setIsTaskParserOpen={setIsTaskParserOpen}
         />
     );
 };

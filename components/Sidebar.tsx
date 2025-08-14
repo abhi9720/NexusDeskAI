@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { List, Task, Note, ActiveSelection, SavedFilter, TaskFilter, Theme } from '../types';
-import { SunIcon, MoonIcon, CalendarDaysIcon, PlusIcon, CogIcon, BellIcon, QuestionMarkCircleIcon, TasksIcon, NotesIcon, DocumentTextIcon, TagIcon, ListBulletIcon, TrashIcon, PencilIcon, MagnifyingGlassIcon, ChevronDoubleRightIcon, StickyNoteIcon, SparklesIcon, DashboardIcon, TrendingUpIcon, ComputerDesktopIcon, UserCircleIcon } from './icons';
+import { SunIcon, MoonIcon, CalendarDaysIcon, PlusIcon, CogIcon, BellIcon, QuestionMarkCircleIcon, TasksIcon, NotesIcon, DocumentTextIcon, TagIcon, ListBulletIcon, TrashIcon, PencilIcon, MagnifyingGlassIcon, ChevronDoubleRightIcon, StickyNoteIcon, SparklesIcon, DashboardIcon, TrendingUpIcon, ComputerDesktopIcon, UserCircleIcon, GithubIcon, LinkedinIcon, LightBulbIcon } from './icons';
 import AddListModal from './AddListModal';
 
 interface SidebarProps {
@@ -11,16 +11,18 @@ interface SidebarProps {
   savedFilters: SavedFilter[];
   activeSelection: ActiveSelection;
   onActiveSelectionChange: (selection: ActiveSelection) => void;
-  onAddList: (list: Omit<List, 'id'>) => void;
+  onAddList: (list: Omit<List, 'id' | 'statuses'>) => void;
   onUpdateList: (list: List) => void;
   onDeleteList: (listId: string) => void;
   onDeleteSavedFilter: (filterId: string) => void;
   onDetailItemChange: (item: Task | Note | null) => void;
+  userName: string;
+  onOpenTaskParser: () => void;
 }
 
 
 const Sidebar = (props: SidebarProps) => {
-    const { lists, tasks, notes, savedFilters, activeSelection, onActiveSelectionChange, onAddList, onUpdateList, onDeleteList, onDeleteSavedFilter, onDetailItemChange } = props;
+    const { lists, tasks, notes, savedFilters, activeSelection, onActiveSelectionChange, onAddList, onUpdateList, onDeleteList, onDeleteSavedFilter, onDetailItemChange, userName, onOpenTaskParser } = props;
     const { theme, setTheme } = useTheme();
     const [isListModalOpen, setIsListModalOpen] = useState(false);
     const [listToEdit, setListToEdit] = useState<List | null>(null);
@@ -141,7 +143,13 @@ const Sidebar = (props: SidebarProps) => {
                           onClick={() => handleSelection({ type: 'ai-chat' })}
                           className={`w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-150 mb-2 animate-pulse-subtle ${activeSelection.type === 'ai-chat' ? 'bg-primary/10 dark:bg-primary/20 text-primary font-semibold' : 'bg-primary/10 text-primary-dark dark:text-primary-light hover:bg-primary/20'}`}>
                           <SparklesIcon className="w-5 h-5" />
-                          <span>Prodify AI</span>
+                          <span>Prodify AI Chat</span>
+                        </button>
+                         <button 
+                          onClick={onOpenTaskParser}
+                          className={`w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-150 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white`}>
+                          <LightBulbIcon className="w-5 h-5" />
+                          <span>Parse from Text</span>
                         </button>
                         <NavItem icon={<DashboardIcon className="w-5 h-5"/>} label="Home" isActive={activeSelection.type === 'dashboard'} onClick={() => handleSelection({type: 'dashboard'})}/>
                         <NavItem icon={<TasksIcon className="w-5 h-5"/>} label="Today" count={tasksTodayCount} isActive={activeSelection.type === 'smart-list' && activeSelection.id === 'today'} onClick={() => handleSelection({type: 'smart-list', id: 'today'})}/>
@@ -202,44 +210,27 @@ const Sidebar = (props: SidebarProps) => {
                 </nav>
                 
                 <div className="flex-shrink-0 pt-4 border-t border-gray-200 dark:border-gray-700/50">
-                    <div className="flex items-center justify-between px-3">
+                    <div className="flex items-center justify-between px-2">
                         <div className="flex items-center space-x-3">
                             <UserCircleIcon className="w-8 h-8 text-gray-500" />
                             <div>
-                                <p className="text-sm font-semibold text-gray-800 dark:text-white">Courtney</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">courtney@prodify.ai</p>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-white">{userName}</p>
                             </div>
                         </div>
-                        <div className="relative" ref={themeMenuRef}>
-                            <button onClick={() => setIsThemeMenuOpen(prev => !prev)} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200" aria-label="Toggle theme menu">
-                                {currentThemeIcon}
-                            </button>
-                            {isThemeMenuOpen && (
-                                <div className="absolute bottom-full mb-2 right-0 w-36 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10 animate-fade-in">
-                                    {themeOptions.map(option => (
-                                        <button
-                                            key={option.value}
-                                            onClick={() => {
-                                                setTheme(option.value);
-                                                setIsThemeMenuOpen(false);
-                                            }}
-                                            className={`w-full flex items-center space-x-3 px-3 py-2 text-sm text-left ${
-                                                theme === option.value
-                                                    ? 'text-primary font-semibold'
-                                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                            }`}
-                                        >
-                                            {option.icon}
-                                            <span>{option.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                         <button onClick={() => handleSelection({ type: 'settings' })} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200" title="Settings" aria-label="Settings">
+                            <CogIcon className="w-5 h-5"/>
+                        </button>
                     </div>
-                    <div className="mt-4 px-3">
-                        <a href="https://github.com/abhi9720" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light transition-colors">
-                            Built by <strong>abhi9720</strong>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex justify-center items-center space-x-2">
+                        <span>Built by <a href="https://github.com/abhi9720" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">abhi9720</a></span>
+                        <a href="https://github.com/abhi9720" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors" aria-label="GitHub">
+                            <GithubIcon className="w-4 h-4" />
+                        </a>
+                        <a href="https://www.linkedin.com/in/abhi9720/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors" aria-label="LinkedIn">
+                            <LinkedinIcon className="w-4 h-4" />
                         </a>
                     </div>
                 </div>

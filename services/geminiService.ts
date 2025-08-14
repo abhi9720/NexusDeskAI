@@ -3,28 +3,30 @@ import { Task, TaskAnalysis, Note, NoteAnalysis, Priority, Status, ChatMessage, 
 import { isToday } from 'date-fns';
 
 
-let ai: GoogleGenAI | null = null;
+let aiInstance: GoogleGenAI | null = null;
 let hasWarned = false;
 
-// Lazily initialize the AI client to prevent app crash if API_KEY is missing.
+// This function is called from the main App component when the API key is loaded or updated.
+export const initializeAi = (apiKey: string | null) => {
+    if (apiKey) {
+        aiInstance = new GoogleGenAI({ apiKey });
+        hasWarned = false; // Reset warning if a key is provided
+    } else {
+        aiInstance = null;
+    }
+};
+
+// Internal function to get the initialized instance.
 const getAiInstance = (): GoogleGenAI | null => {
-    if (ai) {
-        return ai;
-    }
-    
-    // Safely check for process and API_KEY in a browser environment.
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        return ai;
-    }
-    
+    if (aiInstance) return aiInstance;
+
     if (!hasWarned) {
-        console.warn("API_KEY environment variable not set or not accessible. AI features will be disabled.");
+        console.warn("Gemini API key not set. AI features are disabled. Please add your key in the Settings.");
         hasWarned = true;
     }
-    
     return null;
 };
+
 
 export const runChat = async (history: ChatMessage[], message: string, tasks: Task[], lists: List[]) => {
     const gemini = getAiInstance();
@@ -130,6 +132,10 @@ export const runChat = async (history: ChatMessage[], message: string, tasks: Ta
 const taskAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
+    summary: {
+        type: Type.STRING,
+        description: "A concise one-paragraph summary of the task's main goal."
+    },
     complexity: {
       type: Type.STRING,
       description: "Estimate complexity: Simple (< 1 hour), Medium (1-4 hours), or Complex (> 4 hours)."
@@ -139,10 +145,10 @@ const taskAnalysisSchema = {
       items: { type: Type.STRING },
       description: "List of skills required to complete the task."
     },
-    potentialBlockers: {
+     potentialBlockers: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "List of potential challenges or blockers."
+      description: "List of potential blockers or challenges for this task."
     },
     subtasks: {
       type: Type.ARRAY,
@@ -157,7 +163,7 @@ const taskAnalysisSchema = {
       }
     }
   },
-  required: ["complexity", "requiredSkills", "potentialBlockers", "subtasks"]
+  required: ["summary", "complexity", "requiredSkills", "potentialBlockers", "subtasks"]
 };
 
 export const analyzeTaskAndSuggestSubtasks = async (task: Task): Promise<TaskAnalysis | null> => {
@@ -170,10 +176,11 @@ export const analyzeTaskAndSuggestSubtasks = async (task: Task): Promise<TaskAna
     Task Description: "${task.description}"
     
     Based on the provided information, perform the following actions:
-    1.  Estimate the complexity.
-    2.  List the required skills.
-    3.  Identify potential blockers.
-    4.  Break the task down into actionable subtasks with estimated hours for each.
+    1.  Provide a concise one-paragraph summary of the task.
+    2.  Estimate the complexity (Simple, Medium, or Complex).
+    3.  List the required skills.
+    4.  Identify potential blockers.
+    5.  Break the task down into actionable subtasks with estimated hours for each.
     
     Return the response in the specified JSON format.`;
 
@@ -250,3 +257,81 @@ export const summarizeAndTagNote = async (note: Note): Promise<NoteAnalysis | nu
         return null;
     }
 };
+
+export const suggestTaskPriority = async (task: { title: string, description: string }): Promise<Priority | null> => {
+    const gemini = getAiInstance();
+    if (!gemini) return null;
+
+    try {
+        const prompt = `Analyze the following task and determine its priority based on urgency and importance implied in the text.
+        Task Title: "${task.title}"
+        Task Description: "${task.description}"
+        
+        Respond with only one word: 'High', 'Medium', or 'Low'.`;
+
+        const response = await gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        
+        const text = response.text.trim();
+        if (Object.values(Priority).includes(text as Priority)) {
+            return text as Priority;
+        }
+        console.warn(`AI suggested an invalid priority: "${text}"`);
+        return null;
+    } catch (error) {
+        console.error("Error suggesting priority:", error);
+        return null;
+    }
+};
+
+export const parseTasksFromText = async (text: string): Promise<{title: string, description: string}[] | null> => {
+    const gemini = getAiInstance();
+    if (!gemini) return null;
+
+    try {
+        const prompt = `Analyze the following text, which could be meeting notes or a brain dump. Extract all distinct, actionable tasks. For each task, provide a clear title and a comprehensive description based on the context in the text. Ignore any non-task related content.
+        
+        Text to analyze:
+        ---
+        ${text}
+        ---
+        
+        Return the response in the specified JSON format.`;
+
+        const response = await gemini.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: {
+                                type: Type.STRING,
+                                description: "A short, clear title for the task."
+                            },
+                            description: {
+                                type: Type.STRING,
+                                description: "A detailed description of what needs to be done for the task."
+                            }
+                        },
+                        required: ["title", "description"]
+                    }
+                }
+            }
+        });
+
+        const jsonStr = response.text.trim();
+        if (!jsonStr) return null;
+        const result = JSON.parse(jsonStr);
+        return result as {title: string, description: string}[];
+
+    } catch (error) {
+        console.error("Error parsing tasks from text:", error);
+        return null;
+    }
+}

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, Note, TaskAnalysis, NoteAnalysis, Priority, Status, Attachment, ChecklistItem, Comment } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, CameraIcon, VideoIcon, MicrophoneIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon } from './icons';
-import { analyzeTaskAndSuggestSubtasks, summarizeAndTagNote } from '../services/geminiService';
+import { analyzeTaskAndSuggestSubtasks, summarizeAndTagNote, suggestTaskPriority } from '../services/geminiService';
 import { format, isPast, isToday } from 'date-fns';
 import RichTextEditor from './RichTextEditor';
+import { fileService } from '../services/storageService';
 
 const priorityColors: Record<Priority, string> = {
   [Priority.High]: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
@@ -13,25 +14,21 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: string) => void, isPreview: boolean }) => {
-    const baseClasses = "relative group rounded-lg";
+    const baseClasses = "relative group p-2 rounded-lg";
     const bgClass = isPreview ? 'bg-gray-100 dark:bg-gray-700/50' : 'bg-white dark:bg-gray-800';
-    const srcUrl = `safe-file:/${attachment.url}`;
-
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
 
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-24 w-full rounded-md object-contain" /></a>;
+            return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-24 w-full rounded-md object-contain"/></a>;
         }
         if (attachment.type.startsWith('video/')) {
-            return <video src={srcUrl} controls
-                playsInline
-                controlsList="noremoteplayback"
-                disablePictureInPicture className="max-h-48 w-full rounded-md" />;
+            return <video src={srcUrl} controls className="max-h-24 w-full rounded-md" />;
         }
         if (attachment.type.startsWith('audio/')) {
             return <audio src={srcUrl} controls className="w-full text-sm" />;
         }
-        return <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5" /> <span className="truncate">{attachment.name}</span></a>;
+        return <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:underline"><PaperClipIcon className="w-5 h-5"/> <span className="truncate">{attachment.name}</span></a>;
     };
 
     return (
@@ -80,7 +77,7 @@ interface DetailPaneProps {
   onClose: () => void;
   onUpdate: (item: Task | Note) => void;
   onDelete: (itemId: string, type: 'task' | 'note') => void;
-    onAddComment: (taskId: string, content: string) => void;
+  onAddComment: (taskId: string, content: string) => void;
 }
 
 const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailPaneProps) => {
@@ -88,6 +85,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const [editedItem, setEditedItem] = useState(item);
     const [analysis, setAnalysis] = useState<TaskAnalysis | NoteAnalysis | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isSuggestingPriority, setIsSuggestingPriority] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [checklistItemText, setChecklistItemText] = useState('');
     const [tagInput, setTagInput] = useState('');
@@ -126,6 +124,16 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
         setIsAnalyzing(false);
     };
 
+    const handleSuggestPriority = async () => {
+        if (!isTask) return;
+        setIsSuggestingPriority(true);
+        const priority = await suggestTaskPriority({ title: editedItem.title, description: (editedItem as Task).description });
+        if (priority) {
+            handleFieldChange('priority', priority);
+        }
+        setIsSuggestingPriority(false);
+    }
+
     const handleSaveAnalysis = () => {
         if (!analysis || !item) return;
 
@@ -133,8 +141,8 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             const taskAnalysis = analysis as TaskAnalysis;
             const currentTask = item as Task;
 
-            const analysisText = `\n\n<hr>\n<h3>AI Analysis</h3>\n<p><strong>Complexity:</strong> ${taskAnalysis.complexity}</p>\n<p><strong>Skills Required:</strong> ${taskAnalysis.requiredSkills.join(', ')}</p>`;
-
+            const analysisText = `\n\n<hr>\n<h3>AI Analysis</h3>\n<p><strong>Summary:</strong> ${taskAnalysis.summary}</p>\n<p><strong>Complexity:</strong> ${taskAnalysis.complexity}</p>\n<p><strong>Skills Required:</strong> ${taskAnalysis.requiredSkills.join(', ')}</p>`;
+            
             const newChecklistItems: ChecklistItem[] = taskAnalysis.subtasks.map(sub => ({
                 id: uuidv4(),
                 text: `${sub.title} (${sub.hours}h)`,
@@ -153,7 +161,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
 
             const analysisText = `\n\n<hr>\n<h3>AI Summary</h3>\n<p>${noteAnalysis.summary}</p>`;
             const newTags = [...new Set([...currentNote.tags, ...noteAnalysis.tags])];
-
+            
             const updatedNote: Note = {
                 ...currentNote,
                 content: currentNote.content + analysisText,
@@ -161,7 +169,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             };
             onUpdate(updatedNote);
         }
-
+        
         alert('AI Analysis has been saved to the item.');
         setAnalysis(null);
     };
@@ -197,7 +205,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const handleFieldChange = (field: string, value: any) => {
         setEditedItem(prev => ({ ...prev, [field]: value }));
     };
-
+    
     const handlePostComment = () => {
         if (newComment.trim() && isTask) {
             onAddComment(item.id, newComment.trim());
@@ -215,7 +223,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
         if (isFromEditMode) {
             handleFieldChange('checklist', updatedChecklist);
         } else {
-            onUpdate({ ...item, checklist: updatedChecklist });
+            onUpdate({ ...item, checklist: updatedChecklist } as Task);
         }
     };
     
@@ -253,28 +261,19 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
+      const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 
       for (const file of Array.from(files)) {
           if (file.size > MAX_FILE_SIZE) {
-              alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
-              continue;
+            alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+            continue;
           }
-          //   const buffer = await file.arrayBuffer();
-          //   const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
-          //     name: file.name,
-          //     buffer: new Uint8Array(buffer),
-          //   });
-          const buffer = await file.arrayBuffer();
-          const savedPath = await window.electronStore.saveAttachment({
-              name: file.name,
-              buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
-          });
+          const savedPathOrDataUrl = await fileService.saveAttachment(file);
           const newAttachment: Attachment = {
               id: uuidv4(),
               name: file.name,
               type: file.type,
-              url: savedPath,
+              url: savedPathOrDataUrl,
           };
           handleFieldChange('attachments', [...editedItem.attachments, newAttachment]);
       }
@@ -301,9 +300,9 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                 {isTask && (
                     <>
                         <MetadataItem icon={<SparklesIcon className="w-4 h-4" />} label="Status">
-                            <span className={`px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-200 dark:bg-gray-700`}>
+                             <span className={`px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-200 dark:bg-gray-700`}>
                                 {(item as Task).status}
-                            </span>
+                             </span>
                         </MetadataItem>
                         <MetadataItem icon={<FlagIcon className="w-4 h-4" />} label="Priority">
                             <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${priorityColors[(item as Task).priority]}`}>
@@ -317,18 +316,18 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                 )}
 
                 {item.tags && item.tags.length > 0 && (
-                    <MetadataItem icon={<TagIcon className="w-4 h-4" />} label="Tags">
+                     <MetadataItem icon={<TagIcon className="w-4 h-4" />} label="Tags">
                         {item.tags.map(tag => (
                             <span key={tag} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700/80 rounded-md text-xs">{tag}</span>
                         ))}
                     </MetadataItem>
                 )}
             </div>
-
+            
             {(isTask ? (item as Task).description : (item as Note).content) && (
                 <div>
                     <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Description</h3>
-                    <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: isTask ? (item as Task).description : (item as Note).content }} />
+                    <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{__html: isTask ? (item as Task).description : (item as Note).content}} />
                 </div>
             )}
 
@@ -347,7 +346,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             )}
 
             {item.attachments && item.attachments.length > 0 && (
-                <div>
+                 <div>
                     <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Attachments</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {item.attachments.map(att => <AttachmentDisplay key={att.id} attachment={att} isPreview={true} />)}
@@ -361,37 +360,46 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                     {error && <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-lg">{error}</div>}
                     {analysis && (
                         <>
-                            {isTask ? (
-                                <div className="space-y-4 animate-fade-in text-sm">
-                                    <p><strong>Complexity:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).complexity}</span></p>
-                                    <p><strong>Skills:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).requiredSkills.join(', ')}</span></p>
+                             <div className="space-y-4 animate-fade-in text-sm">
+                                {isTask && (analysis as TaskAnalysis).summary && (
+                                     <div>
+                                        <h4 className="font-semibold mb-1">AI Summary:</h4>
+                                        <p className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).summary}</p>
+                                    </div>
+                                )}
+                                {!isTask && (
+                                     <div>
+                                        <h4 className="font-semibold mb-1">Summary:</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-300">{(analysis as NoteAnalysis).summary}</p>
+                                    </div>
+                                )}
+                                {isTask && (
+                                    <>
+                                        <p><strong>Complexity:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).complexity}</span></p>
+                                        <p><strong>Skills:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).requiredSkills.join(', ')}</span></p>
+                                        <div>
+                                            <h4 className="font-semibold mt-2 mb-2">Suggested Subtasks:</h4>
+                                            <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
+                                                {(analysis as TaskAnalysis).subtasks.map((sub, i) => <li key={i}>{sub.title} ({sub.hours}h)</li>)}
+                                            </ul>
+                                        </div>
+                                    </>
+                                )}
+                                {!isTask && (
                                     <div>
-                                        <h4 className="font-semibold mt-2 mb-2">Suggested Subtasks:</h4>
-                                        <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
-                                            {(analysis as TaskAnalysis).subtasks.map((sub, i) => <li key={i}>{sub.title} ({sub.hours}h)</li>)}
-                                        </ul>
-                                    </div>
-                                </div>
-                            ) : (
-                                    <div className="space-y-3 animate-fade-in text-sm">
-                                        <div>
-                                            <h4 className="font-semibold mb-1">Summary:</h4>
-                                            <p className="text-sm text-gray-600 dark:text-gray-300">{(analysis as NoteAnalysis).summary}</p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold mb-2">Suggested Tags:</h4>
-                                            <div className="flex flex-wrap gap-2">
-                                                {(analysis as NoteAnalysis).tags.map(tag => (
-                                                    <span key={tag} className="px-2 py-1 bg-secondary/20 text-secondary-darker dark:bg-secondary/30 dark:text-secondary-light text-xs font-medium rounded-full">
-                                                        {tag}
-                                                    </span>
-                                                ))}
+                                        <h4 className="font-semibold mb-2">Suggested Tags:</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {(analysis as NoteAnalysis).tags.map(tag => (
+                                                <span key={tag} className="px-2 py-1 bg-secondary/20 text-secondary-darker dark:bg-secondary/30 dark:text-secondary-light text-xs font-medium rounded-full">
+                                                    {tag}
+                                                </span>
+                                            ))}
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                             <div className="flex justify-end mt-4">
-                                <button
+                                <button 
                                     onClick={handleSaveAnalysis}
                                     className="px-3 py-1.5 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                                 >
@@ -404,23 +412,23 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             )}
 
             {isTask && (
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">Comments</h3>
-                    <div className="space-y-4">
-                        {(item as Task).comments.map(comment => <CommentItem key={comment.id} comment={comment} />)}
-                    </div>
-                    <div className="mt-4 flex items-start space-x-3">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">Comments</h3>
+                  <div className="space-y-4">
+                      {(item as Task).comments.map(comment => <CommentItem key={comment.id} comment={comment} />)}
+                  </div>
+                   <div className="mt-4 flex items-start space-x-3">
                         <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                            <UserCircleIcon className="w-6 h-6 text-gray-500" />
+                           <UserCircleIcon className="w-6 h-6 text-gray-500" />
                         </div>
                         <div className="flex-grow">
-                            <textarea value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePostComment(); } }} placeholder="Add a comment..." rows={2} className="w-full form-textarea rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary" />
-                            <div className="flex justify-end mt-2">
-                                <button onClick={handlePostComment} disabled={!newComment.trim()} className="px-4 py-1.5 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark disabled:bg-primary/70 dark:disabled:bg-primary/50 disabled:cursor-not-allowed transition-colors">Post</button>
-                            </div>
+                           <textarea value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePostComment(); } }} placeholder="Add a comment..." rows={2} className="w-full form-textarea rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary"/>
+                           <div className="flex justify-end mt-2">
+                               <button onClick={handlePostComment} disabled={!newComment.trim()} className="px-4 py-1.5 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark disabled:bg-primary/70 dark:disabled:bg-primary/50 disabled:cursor-not-allowed transition-colors">Post</button>
+                           </div>
                         </div>
-                    </div>
-                </div>
+                   </div>
+              </div>
             )}
         </div>
     );
@@ -449,7 +457,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                             </button>
                              <input
                                   type="file" ref={btn.ref} accept={btn.accept}
-                                  capture={btn.capture as any} multiple={btn.multiple}
+                                  capture={(btn.capture as any)} multiple={btn.multiple}
                                   onChange={handleFileChange} className="hidden"
                               />
                         </div>
@@ -496,7 +504,18 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                       <input type="date" value={format(new Date((editedItem as Task).dueDate), 'yyyy-MM-dd')} onChange={e => handleFieldChange('dueDate', new Date(e.target.value).toISOString())} required className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                        <div className="flex items-center justify-between mb-1">
+                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
+                             <button
+                                type="button"
+                                onClick={handleSuggestPriority}
+                                disabled={isSuggestingPriority}
+                                className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 flex items-center gap-1"
+                             >
+                                 <SparklesIcon className="w-3 h-3" />
+                                 {isSuggestingPriority ? "Thinking..." : "Suggest"}
+                             </button>
+                        </div>
                       <select value={(editedItem as Task).priority} onChange={e => handleFieldChange('priority', e.target.value as Priority)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
                         {Object.values(Priority).map(p => (<option key={p} value={p}>{p}</option>))}
                       </select>
@@ -515,9 +534,9 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const paneClasses = `
       fixed z-40 bg-brand-light dark:bg-gray-900 flex flex-col transition-all duration-300 ease-in-out
       ${isFullScreen
-            ? 'inset-0 w-screen h-screen'
-            : 'top-0 right-0 h-screen w-[480px] max-w-full shadow-2xl animate-slide-in-right'
-        }
+        ? 'inset-0 w-screen h-screen'
+        : 'top-0 right-0 h-screen w-[480px] max-w-full shadow-2xl animate-slide-in-right'
+      }
     `;
 
     return (
@@ -528,7 +547,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                          <input type="text" value={editedItem.title} onChange={e => handleFieldChange('title', e.target.value)} className="w-full text-lg font-semibold bg-transparent border-b border-dashed border-gray-400 dark:border-gray-500 focus:border-solid focus:border-primary focus:ring-0" />
                      ) : (
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{item.title}</h2>
-                    )}
+                     )}
                  </div>
                 <div className="flex items-center space-x-1">
                     {isEditing ? (
@@ -545,7 +564,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                     ) : (
                         <>
                             <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Edit Item"><PencilIcon className="w-5 h-5" /></button>
-                                <button onClick={handleDelete} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Delete Item"><TrashIcon className="w-5 h-5" /></button>
+                            <button onClick={handleDelete} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Delete Item"><TrashIcon className="w-5 h-5" /></button>
                         </>
                     )}
                     <button
@@ -563,22 +582,22 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             <div className="flex-grow overflow-y-auto pb-24">
                 {isEditing ? renderEditMode() : renderViewMode()}
             </div>
-
+            
             {!isEditing && (
-                <div className="absolute bottom-6 right-6 z-10">
-                    <button
-                        onClick={handleAnalyze}
-                        disabled={isAnalyzing}
-                        className="w-14 h-14 bg-primary rounded-full text-white flex items-center justify-center shadow-lg hover:bg-primary-dark disabled:bg-primary/70 disabled:cursor-not-allowed transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-offset-gray-900"
-                        title="Analyze with AI"
-                        aria-label="Analyze with AI"
-                    >
-                        {isAnalyzing
-                            ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            : <SparklesIcon className="w-7 h-7" />
-                        }
-                    </button>
-                </div>
+              <div className="absolute bottom-6 right-6 z-10">
+                  <button
+                      onClick={handleAnalyze}
+                      disabled={isAnalyzing}
+                      className="w-14 h-14 bg-primary rounded-full text-white flex items-center justify-center shadow-lg hover:bg-primary-dark disabled:bg-primary/70 disabled:cursor-not-allowed transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-offset-gray-900"
+                      title="Analyze with AI"
+                      aria-label="Analyze with AI"
+                  >
+                      {isAnalyzing 
+                          ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          : <SparklesIcon className="w-7 h-7" />
+                      }
+                  </button>
+              </div>
             )}
         </aside>
     );

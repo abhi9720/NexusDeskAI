@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatSession, Task, Note, ActiveSelection } from '../types';
-import { SparklesIcon, ArrowUpIcon, UserCircleIcon, PlusIcon, HistoryIcon, EllipsisHorizontalIcon } from './icons';
+import { SparklesIcon, ArrowUpIcon, UserCircleIcon, PlusIcon, HistoryIcon, EllipsisHorizontalIcon, MicrophoneIcon } from './icons';
+
+// In-browser speech recognition can be inconsistent, so we declare the type to avoid TS errors
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
 
 const CreatedItemCard = ({ item, onView }: { item: Task | Note, onView: () => void }) => {
   const isTask = 'status' in item;
@@ -37,8 +45,12 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const historyMenuRef = useRef<HTMLDivElement>(null);
+    const recognitionRef = useRef<any>(null);
+
 
     const chatHistory = useMemo(() => {
         return sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -70,6 +82,53 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [historyMenuRef]);
+    
+     useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.warn("Speech recognition not supported in this browser.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event: any) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                }
+            }
+            if (finalTranscript) {
+              setInput(prev => prev.trim() + ' ' + finalTranscript.trim());
+            }
+        };
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onend = () => setIsListening(false);
+        recognition.onerror = (event: any) => {
+            console.error("Speech recognition error", event.error);
+            setIsListening(false);
+        };
+        
+        recognitionRef.current = recognition;
+
+        return () => {
+          recognition.stop();
+        }
+    }, []);
+
+    const handleToggleListening = () => {
+      if (!recognitionRef.current) return;
+      if (isListening) {
+          recognitionRef.current.stop();
+      } else {
+          recognitionRef.current.start();
+      }
+    };
 
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -92,9 +151,8 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
 
     const handleExampleClick = async (prompt: string) => {
         if (isLoading) return;
-        setIsLoading(true);
-        await onSendMessage(prompt);
-        setIsLoading(false);
+        setInput(prompt);
+        // await handleSendMessage({ preventDefault: () => {} } as React.FormEvent);
     };
     
     const WelcomeScreen = () => (
@@ -103,7 +161,7 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
           <SparklesIcon className="w-10 h-10 text-white" />
         </div>
         <h2 className="text-3xl font-bold text-gray-800 dark:text-white">How can I help you?</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-md">I can create tasks and notes for you. Try saying:</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-md">I can create tasks and notes for you. Try saying or typing:</p>
         <button 
           onClick={() => handleExampleClick("Create a task to design the new homepage by tomorrow")}
           className="text-sm text-gray-700 dark:text-gray-200 mt-4 font-mono p-3 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -199,10 +257,21 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
                             }
                         }}
                         placeholder="Make it more detailed according to 'Product Launch project'"
-                        className="w-full pl-4 pr-12 py-3 rounded-lg bg-gray-100 dark:bg-gray-800 border-transparent focus:ring-2 focus:ring-primary resize-none"
+                        className="w-full pl-12 pr-12 py-3 rounded-lg bg-gray-100 dark:bg-gray-800 border-transparent focus:ring-2 focus:ring-primary resize-none"
                         rows={1}
                         disabled={isLoading}
                     />
+                     <button
+                        type="button"
+                        onClick={handleToggleListening}
+                        disabled={!recognitionRef.current}
+                        className={`absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                            isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300'
+                        }`}
+                        title="Use voice input"
+                    >
+                        <MicrophoneIcon className="w-5 h-5" />
+                    </button>
                     <button
                         type="submit"
                         disabled={!input.trim() || isLoading}

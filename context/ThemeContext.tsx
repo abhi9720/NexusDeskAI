@@ -9,20 +9,16 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const [theme, setTheme] = useState<Theme>('system');
+    const [theme, setTheme] = useState<Theme>(() => {
+        if (typeof window === 'undefined') {
+            return 'system';
+        }
+        const savedTheme = localStorage.getItem('theme') as Theme | null;
+        return savedTheme && ['light', 'dark', 'system'].includes(savedTheme) ? savedTheme : 'system';
+    });
 
     useEffect(() => {
-        const fetchTheme = async () => {
-            const savedTheme = await window.electronStore.get('theme') as Theme | null;
-            if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
-                setTheme(savedTheme);
-            }
-        };
-        fetchTheme();
-    }, []);
-
-    useEffect(() => {
-        window.electronStore.set('theme', theme);
+        localStorage.setItem('theme', theme);
         const root = window.document.documentElement;
         
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

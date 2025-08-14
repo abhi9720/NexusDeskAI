@@ -7,6 +7,9 @@ import StickyNotesView from './StickyNotesView';
 import AIChatView from './AIChatView';
 import DashboardView from './DashboardView';
 import MomentumView from './MomentumView';
+import SettingsView from './SettingsView';
+import GlobalSearchModal from './GlobalSearchModal';
+import AITaskParserModal from './AITaskParserModal';
 
 interface AppLayoutProps {
   lists: List[];
@@ -43,10 +46,18 @@ interface AppLayoutProps {
   onUpsertHabit: (habit: Habit) => void;
   onDeleteHabit: (habitId: string) => void;
   onToggleHabitLog: (habitId: string, date: Date) => void;
+  userName: string;
+  apiKey: string | null;
+  onUpdateUser: (name: string) => void;
+  onUpdateApiKey: (key: string) => void;
+  isSearchOpen: boolean;
+  setIsSearchOpen: (isOpen: boolean) => void;
+  isTaskParserOpen: boolean;
+  setIsTaskParserOpen: (isOpen: boolean) => void;
 }
 
 const AppLayout = (props: AppLayoutProps) => {
-  const { detailItem, onDetailItemChange, activeSelection } = props;
+  const { detailItem, onDetailItemChange, activeSelection, userName, apiKey, onUpdateUser, onUpdateApiKey, isSearchOpen, setIsSearchOpen, isTaskParserOpen, setIsTaskParserOpen } = props;
 
   const renderContent = () => {
     switch (activeSelection.type) {
@@ -93,6 +104,13 @@ const AppLayout = (props: AppLayoutProps) => {
             onDeleteHabit={props.onDeleteHabit}
             onToggleHabitLog={props.onToggleHabitLog}
           />;
+      case 'settings':
+        return <SettingsView 
+            userName={userName}
+            apiKey={apiKey}
+            onUpdateUser={onUpdateUser}
+            onUpdateApiKey={onUpdateApiKey}
+          />;
       default:
          return <MainContentView 
               activeSelection={activeSelection}
@@ -109,6 +127,11 @@ const AppLayout = (props: AppLayoutProps) => {
     }
   };
 
+  const handleSelectSearchItem = (item: Task | Note) => {
+    onDetailItemChange(item);
+    setIsSearchOpen(false);
+  };
+
   return (
     <div className="h-screen w-screen flex">
       <Sidebar 
@@ -123,10 +146,30 @@ const AppLayout = (props: AppLayoutProps) => {
         onDeleteList={props.onDeleteList}
         onDeleteSavedFilter={props.onDeleteSavedFilter}
         onDetailItemChange={props.onDetailItemChange}
+        userName={userName}
+        onOpenTaskParser={() => setIsTaskParserOpen(true)}
       />
       <main className="flex-1 flex flex-col overflow-hidden bg-brand-light dark:bg-brand-dark">
         {renderContent()}
       </main>
+      
+      <AITaskParserModal
+        isOpen={isTaskParserOpen}
+        onClose={() => setIsTaskParserOpen(false)}
+        onAddItem={props.onAddItem}
+        lists={props.lists}
+      />
+      
+      {isSearchOpen && (
+          <GlobalSearchModal
+              isOpen={isSearchOpen}
+              onClose={() => setIsSearchOpen(false)}
+              tasks={props.tasks}
+              notes={props.notes}
+              onSelectItem={handleSelectSearchItem}
+           />
+      )}
+
       {detailItem && (
         <>
           <div

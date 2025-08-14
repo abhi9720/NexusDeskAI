@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, Note, Priority, Attachment, ChecklistItem } from '../types';
-import { XMarkIcon, DocumentTextIcon, PlusIcon, TrashIcon, TagIcon, PaperClipIcon, ListBulletIcon, FullScreenIcon, ExitFullScreenIcon } from './icons';
+import { XMarkIcon, DocumentTextIcon, PlusIcon, TrashIcon, TagIcon, PaperClipIcon, ListBulletIcon, FullScreenIcon, ExitFullScreenIcon, SparklesIcon } from './icons';
 import { format } from 'date-fns';
 import RichTextEditor from './RichTextEditor';
+import { fileService } from '../services/storageService';
+import { suggestTaskPriority } from '../services/geminiService';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -14,10 +16,10 @@ interface AddItemModalProps {
 }
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
-    const srcUrl = `safe-file://${attachment.url}`;
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
-            return <img src={srcUrl} alt={attachment.name} className="max-h-20 rounded-md object-contain" />;
+            return <img src={srcUrl} alt={attachment.name} className="max-h-20 rounded-md object-contain"/>;
         }
         if (attachment.type.startsWith('video/')) {
             return <video src={srcUrl} controls className="max-h-20 rounded-md" />;
@@ -49,6 +51,7 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isSuggestingPriority, setIsSuggestingPriority] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,33 +72,24 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
 
   if (!isOpen) return null;
   
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+      const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
       for (const file of Array.from(files)) {
           if (file.size > MAX_FILE_SIZE) {
-              alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
-              continue;
+            alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
+            continue;
           }
-
-          //   const buffer = await file.arrayBuffer();
-          //   const savedPath = await window.electron.ipcRenderer.invoke('save-attachment', {
-          //     name: file.name,
-          //     buffer: new Uint8Array(buffer),
-          //   });
-          const buffer = await file.arrayBuffer();
-          const savedPath = await window.electronStore.saveAttachment({
-              name: file.name,
-              buffer: Array.from(new Uint8Array(buffer)), // safer for IPC
-          });
+          
+          const savedPathOrDataUrl = await fileService.saveAttachment(file);
 
           const newAttachment: Attachment = {
               id: uuidv4(),
               name: file.name,
               type: file.type,
-              url: savedPath,
+              url: savedPathOrDataUrl,
           };
           setAttachments(prev => [...prev, newAttachment]);
       }
@@ -144,6 +138,19 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
         setTagInput('');
     }
   };
+  
+  const handleSuggestPriority = async () => {
+      if (!title.trim()) {
+          alert("Please enter a title before suggesting a priority.");
+          return;
+      }
+      setIsSuggestingPriority(true);
+      const suggested = await suggestTaskPriority({ title, description });
+      if (suggested) {
+          setPriority(suggested);
+      }
+      setIsSuggestingPriority(false);
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -312,7 +319,13 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
                     />
                 </div>
                 <div>
-                    <label htmlFor="priority" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Priority</label>
+                    <div className="flex items-center justify-between mb-1">
+                        <label htmlFor="priority" className="block text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
+                        <button type="button" onClick={handleSuggestPriority} disabled={isSuggestingPriority} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
+                            <SparklesIcon className="w-3 h-3"/>
+                            {isSuggestingPriority ? 'Thinking...' : 'Suggest'}
+                        </button>
+                    </div>
                     <select
                         id="priority" value={priority} onChange={e => setPriority(e.target.value as Priority)}
                         className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary"

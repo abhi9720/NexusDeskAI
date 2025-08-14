@@ -19,17 +19,19 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const AttachmentDisplay = ({ attachment }: { attachment: Attachment }) => {
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
+
     if (attachment.type.startsWith('image/')) {
-        return <a href={attachment.url} target="_blank" rel="noopener noreferrer"><img src={attachment.url} alt={attachment.name} className="max-h-40 w-auto rounded-lg object-contain border dark:border-gray-600"/></a>;
+        return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-40 w-auto rounded-lg object-contain border dark:border-gray-600"/></a>;
     }
     if (attachment.type.startsWith('video/')) {
-        return <video src={attachment.url} controls className="max-h-40 w-auto rounded-lg" />;
+        return <video src={srcUrl} controls className="max-h-40 w-auto rounded-lg" />;
     }
     if (attachment.type.startsWith('audio/')) {
-        return <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg"><p className="text-sm mb-2">{attachment.name}</p><audio src={attachment.url} controls className="w-full" /></div>;
+        return <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg"><p className="text-sm mb-2">{attachment.name}</p><audio src={srcUrl} controls className="w-full" /></div>;
     }
     return (
-      <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+      <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-sm p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
         <PaperClipIcon className="w-5 h-5 flex-shrink-0"/>
         <span className="truncate">{attachment.name}</span>
       </a>
