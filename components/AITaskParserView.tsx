@@ -4,7 +4,7 @@ import { SparklesIcon, CheckIcon } from './icons';
 import { parseTasksFromText } from '../services/geminiService';
 
 interface AITaskParserViewProps {
-  onAddItem: (item: Partial<Task>, listId: string, type: 'task') => void;
+  onAddItem: (item: Partial<Task>, listId: number, type: 'task') => void;
   lists: List[];
 }
 
@@ -17,7 +17,7 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
     const [inputText, setInputText] = useState('');
     const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
     const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
-    const [targetListId, setTargetListId] = useState<string>('');
+    const [targetListId, setTargetListId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -26,10 +26,10 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
         if (taskLists.length > 0) {
             setTargetListId(currentId => {
                 const isValid = taskLists.some(l => l.id === currentId);
-                return isValid ? currentId : taskLists[0].id;
+                return isValid ? currentId : (taskLists[0]?.id ?? null);
             });
         } else {
-            setTargetListId('');
+            setTargetListId(null);
         }
     }, [lists]);
 
@@ -61,7 +61,7 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
     };
 
     const handleAddTasks = () => {
-        if (!targetListId) {
+        if (targetListId === null) {
             alert('Please select a list to add tasks to.');
             return;
         }
@@ -124,7 +124,7 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
                         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Parsed Tasks ({selectedTasks.size}/{parsedTasks.length})</h3>
                         <div className="flex items-center gap-2">
                             <label htmlFor="list-select" className="text-xs font-medium">Add to:</label>
-                            <select id="list-select" value={targetListId} onChange={e => setTargetListId(e.target.value)} className="form-select text-xs rounded-md py-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
+                            <select id="list-select" value={targetListId || ''} onChange={e => setTargetListId(Number(e.target.value))} className="form-select text-xs rounded-md py-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
                                 {taskLists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}
                             </select>
                         </div>

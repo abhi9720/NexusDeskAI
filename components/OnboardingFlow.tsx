@@ -19,7 +19,7 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     };
 
     const handleFinish = () => {
-        onComplete({ userName: userName.trim(), apiKey: apiKey.trim() || undefined });
+        onComplete({ userName: userName.trim(), apiKey: apiKey.trim() });
     }
 
     const renderStep = () => {

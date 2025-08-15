@@ -1,16 +1,26 @@
 import { webStorage } from './webStorage';
 import { desktopStorage } from './desktopStorage';
 
+declare global {
+    interface Window {
+        desktopStorage: {
+            getAll: (collection: string) => Promise<any[]>;
+            getById: (collection: string, id: string | number) => Promise<any>;
+            add: (collection: string, data: any) => Promise<any>;
+            update: (collection: string, id: string | number, data: any) => Promise<any>;
+            delete: (collection: string, id: string | number) => Promise<void>;
+            saveAttachment: (file: { name: string, buffer: Uint8Array }) => Promise<string>;
+        };
+    }
+}
+
+
 export const isDesktop = !!window.desktopStorage;
-console.log("Is Desktop: ", isDesktop);
-console.log(window.desktopStorage);
-
-
 
 // --- File Service ---
 const saveAttachmentDesktop = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer();
-    // This relies on the preload script exposing 'saveAttachment' on electronStore
+    // This relies on the preload script exposing 'saveAttachment' on desktopStorage
     const savedPath = await window.desktopStorage.saveAttachment({
         name: file.name,
         buffer: new Uint8Array(buffer),

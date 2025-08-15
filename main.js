@@ -5,41 +5,45 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const dbPath = path.join(app.getPath('userData'), 'taskflow_ai.db');
 console.log(">>> ", dbPath);
 
 const db = new Database(dbPath);
 
+// Enable foreign key enforcement
+db.pragma('foreign_keys = ON');
 
-console.log('Dropping existing tables if they exist...');
-
-const dropTables = [
-    'lists',
-    'customFieldDefinitions',
-    'tasks',
-    'notes',
-    'savedFilters',
-    'stickyNotes',
-    'chatSessions',
-    'goals',
-    'habits',
-    'habitLogs',
-    'settings'
-];
-
-dropTables.forEach(table => {
-    try {
-        db.exec(`DROP TABLE IF EXISTS ${table};`);
-        console.log(`Dropped table ${table}`);
-    } catch (err) {
-        console.error(`Error dropping table ${table}:`, err);
+// ----------------------- Helper functions -----------------------
+function parseRow(row) {
+    if (!row) return null;
+    const parsedRow = { ...row };
+    for (const key in parsedRow) {
+        try {
+            parsedRow[key] = JSON.parse(parsedRow[key]);
+        } catch {
+            // Convert string "true"/"false" to boolean
+            if (parsedRow[key] === "true") parsedRow[key] = true;
+            else if (parsedRow[key] === "false") parsedRow[key] = false;
+        }
     }
-});
+    return parsedRow;
+}
 
-console.log('Recreating tables with latest schema...');
+function stringifyData(data) {
+    const stringified = {};
+    for (const key in data) {
+        let val = data[key];
+        if (typeof val === 'object' && val !== null) {
+            val = JSON.stringify(val);
+        } else if (typeof val === 'boolean') {
+            val = val.toString(); // "true"/"false"
+        }
+        stringified[key] = val;
+    }
+    return stringified;
+}
 
-
+// ----------------------- Table creation -----------------------
 db.exec(`
 CREATE TABLE IF NOT EXISTS lists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +137,7 @@ CREATE TABLE IF NOT EXISTS habitLogs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     habitId INTEGER NOT NULL,
     date DATE NOT NULL,
-    completed BOOLEAN NOT NULL,
+    completed TEXT NOT NULL,
     FOREIGN KEY (habitId) REFERENCES habits(id) ON DELETE CASCADE
 );
 
@@ -143,13 +147,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-// Insert default settings if they don't exist
+// Insert default settings
 const defaultSettings = [
     { id: 'onboardingComplete', value: 'false' },
     { id: 'userName', value: '' },
     { id: 'apiKey', value: '' },
 ];
-
 defaultSettings.forEach(setting => {
     const existing = db.prepare(`SELECT 1 FROM settings WHERE id = ?`).get(setting.id);
     if (!existing) {
@@ -159,135 +162,78 @@ defaultSettings.forEach(setting => {
 
 console.log("Database initialized");
 
-
-// Helper functions to parse and stringify JSON fields
-function parseRow(row) {
-    if (!row) return null;
-    const parsedRow = { ...row };
-    for (const key in parsedRow) {
-        try {
-            parsedRow[key] = JSON.parse(parsedRow[key]);
-        } catch {
-            // Not a JSON string, leave as is
-        }
-    }
-    return parsedRow;
-}
-
-function stringifyData(data) {
-    const stringified = {};
-    for (const key in data) {
-        if (typeof data[key] === 'object' && data[key] !== null) {
-            stringified[key] = JSON.stringify(data[key]);
-        } else {
-            stringified[key] = data[key];
-        }
-    }
-    return stringified;
-}
-
-
-ipcMain.handle('save-attachment', async (event, { name, buffer }) => {
+// ----------------------- IPC handlers -----------------------
+ipcMain.handle('save-attachment', (event, { name, buffer }) => {
     const attachmentsPath = path.join(app.getPath('userData'), 'attachments');
-    if (!fs.existsSync(attachmentsPath)) {
-        fs.mkdirSync(attachmentsPath, { recursive: true });
-    }
+    if (!fs.existsSync(attachmentsPath)) fs.mkdirSync(attachmentsPath, { recursive: true });
     const filePath = path.join(attachmentsPath, name);
     fs.writeFileSync(filePath, Buffer.from(buffer));
     return filePath;
 });
 
 ipcMain.handle('db:getAll', (event, table) => {
-    console.log("query all ", table);
     const stmt = db.prepare(`SELECT * FROM ${table}`);
-    const rows = stmt.all();
-    console.log(rows.map(parseRow));
-    return rows.map(parseRow);
+    return stmt.all().map(parseRow);
 });
 
 ipcMain.handle('db:getById', (event, table, id) => {
-    console.log(`query ${table} with id ${id}`);
-
     const stmt = db.prepare(`SELECT * FROM ${table} WHERE id = ?`);
-    const row = stmt.get(id);
-    console.log(parseRow(row));
-
-    return parseRow(row);
+    return parseRow(stmt.get(id));
 });
 
 ipcMain.handle('db:add', (event, table, data) => {
-    console.log("Adding to ", table, data);
-
     const stringifiedData = stringifyData(data);
     const keys = Object.keys(stringifiedData);
     const placeholders = keys.map(() => '?').join(',');
-    // Check if the ID already exists
-    const existing = db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(data.id);
-    if (!existing) {
-        db.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${placeholders})`).run(...keys.map(k => stringifiedData[k]));
-    }
-    // Optionally, return the id or null
-    return data.id;
+
+    const stmt = db.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${placeholders})`);
+    const info = stmt.run(...keys.map(k => stringifiedData[k]));
+
+    const newId = info.lastInsertRowid;
+    const newRow = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(newId);
+
+    return parseRow(newRow);
 });
 
 ipcMain.handle('db:update', (event, table, id, data) => {
-    console.log(`Updating ${table} with id ${id}`, data);
-
     const stringifiedData = stringifyData(data);
     const keys = Object.keys(stringifiedData);
-
     const assignments = keys.map(key => `${key} = ?`).join(',');
     const stmt = db.prepare(`UPDATE ${table} SET ${assignments} WHERE id = ?`);
-    const info = stmt.run(...keys.map(k => stringifiedData[k]), id);
-    return info.changes;
+    return stmt.run(...keys.map(k => stringifiedData[k]), id).changes;
 });
 
 ipcMain.handle('db:delete', (event, table, id) => {
-    console.log(`Deleting from ${table} with id ${id}`);
-
     const stmt = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
-    const info = stmt.run(id);
-    return info.changes;
+    return stmt.run(id).changes;
 });
 
-
+// ----------------------- Create BrowserWindow -----------------------
 const createWindow = () => {
     const win = new BrowserWindow({
         fullscreen: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            webSecurity: false 
-
+            webSecurity: false
         }
     });
-    // win.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
-    win.loadURL('http://localhost:5173');
+    win.loadURL('http://localhost:5173'); // Vite dev
     win.webContents.openDevTools();
 };
 
-// Must be before app.whenReady()
-protocol.registerSchemesAsPrivileged([
-    {
-        scheme: 'safe-file',
-        privileges: {
-            secure: true,
-            standard: true,
-            supportFetchAPI: true,
-            corsEnabled: true,
-            stream: true
-        }
-    }
-]);
+// ----------------------- Safe-file protocol -----------------------
+protocol.registerSchemesAsPrivileged([{
+    scheme: 'safe-file',
+    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true, stream: true }
+}]);
 
 app.whenReady().then(() => {
     protocol.registerFileProtocol('safe-file', (request, callback) => {
         const url = request.url.replace('safe-file://', '');
-        const decodedPath = decodeURIComponent(url);
-        callback(decodedPath);
+        callback(decodeURIComponent(url));
     });
 
     createWindow();
-
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

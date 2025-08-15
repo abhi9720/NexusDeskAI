@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Note, NoteAnalysis, Attachment } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, TagIcon, PaperClipIcon } from './icons';
 import { summarizeAndTagNote } from '../services/geminiService';
@@ -10,12 +9,14 @@ interface NoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  onUpdate: (note: Omit<Note, 'updatedAt'>) => void;
-  onDelete: (noteId: string) => void;
+  onUpdate: (note: Omit<Note, 'updatedAt' | 'id'> & { id: number }) => void;
+  onDelete: (noteId: number) => void;
   note: Note | null;
 }
 
-const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: string) => void, isPreview: boolean }) => {
+const newId = () => Date.now() + Math.floor(Math.random() * 1000);
+
+const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: number) => void, isPreview: boolean }) => {
     const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
@@ -93,7 +94,7 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
           const savedPathOrDataUrl = await fileService.saveAttachment(file);
 
           const newAttachment: Attachment = {
-              id: uuidv4(),
+              id: newId(),
               name: file.name,
               type: file.type,
               url: savedPathOrDataUrl,
@@ -103,7 +104,7 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
       setActiveTab('write');
   };
   
-  const removeAttachment = (id: string) => {
+  const removeAttachment = (id: number) => {
       setAttachments(prev => prev.filter(att => att.id !== id));
   }
 
@@ -122,7 +123,7 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
         onUpdate(noteToUpdate);
     } else {
         // Add: pass only the new data, with a default listId
-        onAdd({ ...noteData, listId: '3' }); // Default note list
+        onAdd({ ...noteData, listId: 3 }); // Default note list
     }
     onClose();
   };
@@ -137,7 +138,7 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
     setIsAnalyzing(true);
     setError(null);
     setAnalysis(null);
-    const tempNote: Note = { id: 'temp', listId: 'temp', title, content, tags:[], createdAt:'', updatedAt:'', attachments: [] };
+    const tempNote: Note = { id: 0, listId: 0, title, content, tags:[], createdAt:'', updatedAt:'', attachments: [] };
     const result = await summarizeAndTagNote(tempNote);
     if (result) {
       setAnalysis(result);

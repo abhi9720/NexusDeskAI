@@ -2,24 +2,24 @@ import * as React from 'react';
 import AppLayout from './components/AppLayout';
 import OnboardingFlow from './components/OnboardingFlow';
 import {
-  List,
-  Task,
-  Note,
-  Status,
-  Priority,
-  ActiveSelection,
-  SavedFilter,
-  StickyNote,
-  TaskFilter,
-  ChecklistItem,
-  Attachment,
-  ChatSession,
-  ChatMessage,
-  Goal,
-  Habit,
-  HabitLog,
-  ListStatusMapping,
-  Comment,
+    List,
+    Task,
+    Note,
+    Status,
+    Priority,
+    ActiveSelection,
+    SavedFilter,
+    StickyNote,
+    TaskFilter,
+    ChecklistItem,
+    Attachment,
+    ChatSession,
+    ChatMessage,
+    Goal,
+    Habit,
+    HabitLog,
+    ListStatusMapping,
+    Comment,
     CustomFieldDefinition,
     ActivityLog,
 } from './types';
@@ -53,7 +53,7 @@ const App = () => {
     const [focusTask, setFocusTask] = React.useState<Task | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
     const [addingItemInfo, setAddingItemInfo] = React.useState<{ type: 'task' | 'note', listId: number } | null>(null);
-    
+
     // --- GLOBAL KEYBOARD SHORTCUTS ---
     React.useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -81,9 +81,9 @@ const App = () => {
                 setUserName(storedName);
                 setApiKey(storedKey);
                 initializeAi(storedKey);
-                 loadAllData();
+                loadAllData();
             } else {
-                 setIsDataLoaded(true); // Allow onboarding to show without loading all data
+                setIsDataLoaded(true); // Allow onboarding to show without loading all data
             }
         }
 
@@ -120,15 +120,15 @@ const App = () => {
 
         checkOnboarding();
     }, []);
-    
+
     // --- HANDLERS ---
     const handleAddList = async (list: Omit<List, 'id' | 'statuses'>) => {
-        const defaultStatuses: ListStatusMapping[] | undefined = list.type === 'task' 
+        const defaultStatuses: ListStatusMapping[] | undefined = list.type === 'task'
             ? [
                 { status: Status.ToDo, name: 'To Do' },
                 { status: Status.InProgress, name: 'In Progress' },
                 { status: Status.Done, name: 'Done' }
-              ]
+            ]
             : undefined;
         const newList = { ...list, statuses: defaultStatuses };
         const addedList = await storageService.add('lists', newList);
@@ -163,11 +163,11 @@ const App = () => {
         setLists(prev => prev.filter(l => l.id !== listId));
 
         if (activeSelection.type === 'list' && activeSelection.id === listId) {
-            setActiveSelection({type: 'smart-list', id: 'today'});
+            setActiveSelection({ type: 'smart-list', id: 'today' });
             setDetailItem(null);
         }
     };
-    
+
     const handleAddItem = async (item: Partial<Task & Note>, listId: number, type: 'task' | 'note'): Promise<Task | Note> => {
         setAddingItemInfo(null);
         let targetListId = listId;
@@ -182,7 +182,7 @@ const App = () => {
             const title = item.title || 'Untitled Task';
 
             const newActivityLog: ActivityLog = { id: newSubId(), type: 'created', content: {}, taskTitle: title, createdAt, userName };
-            const newTaskData = { 
+            const newTaskData = {
                 listId: targetListId,
                 title,
                 description: item.description || '',
@@ -198,24 +198,34 @@ const App = () => {
                 customFields: item.customFields || {},
             };
             const newTask = await storageService.add('tasks', newTaskData);
-            setTasks(prev => [...prev, newTask]);
-            return newTask;
+            if (newTask) {
+                setTasks(prev => [...prev, newTask]);
+                return newTask;
+            } else {
+                console.error("Failed to add task: storage service returned an empty value.");
+                throw new Error("Failed to add task: storage service returned an empty value.");
+            }
         } else {
-            const newNoteData = { 
+            const newNoteData = {
                 listId: targetListId,
                 title: item.title || 'Untitled Note',
                 content: item.content || '',
                 tags: item.tags || [],
-                createdAt: new Date().toISOString(), 
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 attachments: item.attachments || [],
             };
             const newNote = await storageService.add('notes', newNoteData);
-            setNotes(prev => [newNote, ...prev]);
-            return newNote;
+            if (newNote) {
+                setNotes(prev => [newNote, ...prev]);
+                return newNote;
+            } else {
+                console.error("Failed to add note: storage service returned an empty value.");
+                throw new Error("Failed to add note: storage service returned an empty value.");
+            }
         }
     };
-    
+
     const handleUpdateItem = async (item: Task | Note) => {
         if ('status' in item) { // Task
             const originalTask = tasks.find(t => t.id === item.id);
@@ -246,11 +256,11 @@ const App = () => {
 
     const handleDeleteItem = async (itemId: number, type: 'task' | 'note') => {
         await storageService.delete(type === 'task' ? 'tasks' : 'notes', itemId);
-       if (type === 'task') {
-         setTasks(prev => prev.filter(t => t.id !== itemId));
-       } else {
-         setNotes(prev => prev.filter(n => n.id !== itemId));
-       }
+        if (type === 'task') {
+            setTasks(prev => prev.filter(t => t.id !== itemId));
+        } else {
+            setNotes(prev => prev.filter(n => n.id !== itemId));
+        }
     };
 
     const handleAddComment = async (taskId: number, content: string) => {
@@ -318,7 +328,7 @@ const App = () => {
         }
         setHabits(prev => prev.map(h => h.linkedGoalId === goalId ? { ...h, linkedGoalId: null } : h));
     };
-    
+
     const handleUpsertHabit = async (habit: Omit<Habit, 'id'> & { id?: number }) => {
         if (habit.id) {
             await storageService.update('habits', habit.id, habit);
@@ -365,7 +375,7 @@ const App = () => {
         let existingSession: ChatSession | undefined;
 
         if (currentSessionId) {
-             existingSession = chatSessions.find(s => s.id === currentSessionId)!;
+            existingSession = chatSessions.find(s => s.id === currentSessionId)!;
         }
 
         if (!existingSession) {
@@ -385,7 +395,7 @@ const App = () => {
         } else {
             modelMessage = { role: 'model', text: response.text || 'Sorry, I could not process that.' };
         }
-        
+
         sessionToUpdate.messages.push(modelMessage as ChatMessage);
         await storageService.update('chatSessions', sessionToUpdate.id, sessionToUpdate);
 
@@ -410,7 +420,7 @@ const App = () => {
             { name: 'Work', color: '#3B82F6', type: 'task', defaultView: 'board', statuses: [{ status: Status.Backlog, name: 'Backlog' }, { status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Review, name: 'In Review' }, { status: Status.Done, name: 'Done' }] },
             { name: 'Quick Notes', color: '#FBBF24', type: 'note' },
         ];
-        
+
         const addedLists = await Promise.all(defaultListsData.map(list => storageService.add('lists', list)));
 
         setLists(addedLists);

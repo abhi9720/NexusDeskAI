@@ -1,7 +1,7 @@
 import { openDB, IDBPDatabase } from 'idb';
 
 const DB_NAME = 'TaskFlowAI';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version to trigger upgrade
 const COLLECTIONS = [
   'lists', 'tasks', 'notes', 'savedFilters', 'stickyNotes', 
   'chatSessions', 'goals', 'habits', 'habitLogs', 'customFieldDefinitions'
@@ -15,10 +15,10 @@ const initDB = () => {
     return dbPromise;
   }
   dbPromise = openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       COLLECTIONS.forEach(collection => {
         if (!db.objectStoreNames.contains(collection)) {
-          db.createObjectStore(collection, { keyPath: 'id' });
+          db.createObjectStore(collection, { keyPath: 'id', autoIncrement: true });
         }
       });
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
@@ -35,24 +35,24 @@ export const webStorage = {
     return await db.getAll(collection);
   },
 
-  async getById(collection: string, id: string) {
+  async getById(collection: string, id: number | string) {
     const db = await initDB();
     return await db.get(collection, id);
   },
 
   async add(collection: string, data: any) {
     const db = await initDB();
-    await db.add(collection, data);
-    return data;
+    const newId = await db.add(collection, data);
+    return await db.get(collection, newId); // Return the full object with the new ID
   },
 
-  async update(collection: string, id: string, data: any) {
+  async update(collection: string, id: number | string, data: any) {
     const db = await initDB();
     await db.put(collection, { ...data, id });
     return data;
   },
 
-  async delete(collection: string, id: string) {
+  async delete(collection: string, id: number | string) {
     const db = await initDB();
     await db.delete(collection, id);
   },

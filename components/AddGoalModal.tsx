@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Goal, List } from '../types';
 import { XMarkIcon, CrosshairIcon } from './icons';
 import { format } from 'date-fns';
@@ -7,7 +6,7 @@ import { format } from 'date-fns';
 interface AddGoalModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (goal: Goal) => void;
+  onSave: (goal: Omit<Goal, 'id'> & { id?: number }) => void;
   goalToEdit: Goal | null;
   taskLists: List[];
 }
@@ -16,7 +15,7 @@ const AddGoalModal = ({ isOpen, onClose, onSave, goalToEdit, taskLists }: AddGoa
   const [title, setTitle] = useState('');
   const [vision, setVision] = useState('');
   const [targetDate, setTargetDate] = useState('');
-  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null);
+  const [linkedProjectId, setLinkedProjectId] = useState<number | null>(null);
   const [imageUrl, setImageUrl] = useState('');
 
   useEffect(() => {
@@ -46,15 +45,19 @@ const AddGoalModal = ({ isOpen, onClose, onSave, goalToEdit, taskLists }: AddGoa
       return;
     }
     
-    const goalData: Goal = {
-      id: goalToEdit?.id || uuidv4(),
+    const goalData = {
       title,
       vision,
       targetDate: new Date(targetDate).toISOString(),
       linkedProjectId,
       imageUrl: imageUrl || undefined,
     };
-    onSave(goalData);
+
+    if (goalToEdit) {
+        onSave({ ...goalToEdit, ...goalData });
+    } else {
+        onSave(goalData);
+    }
     onClose();
   };
 
@@ -85,7 +88,7 @@ const AddGoalModal = ({ isOpen, onClose, onSave, goalToEdit, taskLists }: AddGoa
           </div>
           <div>
             <label htmlFor="goal-linked-project" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Link to Project (for auto-progress)</label>
-            <select id="goal-linked-project" value={linkedProjectId || ''} onChange={e => setLinkedProjectId(e.target.value || null)} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary">
+            <select id="goal-linked-project" value={linkedProjectId || ''} onChange={e => setLinkedProjectId(e.target.value ? Number(e.target.value) : null)} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary">
               <option value="">None</option>
               {taskLists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}
             </select>

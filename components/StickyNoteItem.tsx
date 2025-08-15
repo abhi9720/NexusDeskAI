@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { StickyNote } from '../types';
 import { XMarkIcon } from './icons';
 
 interface StickyNoteItemProps {
     note: StickyNote;
     onUpdate: (note: StickyNote) => void;
-    onDelete: (id: string) => void;
+    onDelete: (id: number) => void;
 }
 
 const colors = ['#FBBF24', '#A78BFA', '#60A5FA', '#F472B6', '#34D399', '#E5E7EB'];

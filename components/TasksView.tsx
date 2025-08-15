@@ -8,7 +8,7 @@ interface TasksViewProps {
   tasks: Task[];
   onAddTask: (task: Partial<Task>) => void;
   onUpdateTask: (task: Task) => void;
-  onDeleteTask: (taskId: string) => void;
+  onDeleteTask: (taskId: number) => void;
   taskFilter: TaskFilter;
   setTaskFilter: (update: React.SetStateAction<TaskFilter>) => void;
 }
@@ -38,7 +38,7 @@ const TaskCard = ({ task, onClick, onDragStart }: { task: Task; onClick: () => v
     return (
         <div
             draggable
-            onDragStart={(e) => onDragStart(e, task.id)}
+            onDragStart={(e) => onDragStart(e, String(task.id))}
             onClick={onClick}
             className="p-4 mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all"
             role="button"
@@ -180,7 +180,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: Status) => {
     const taskId = e.dataTransfer.getData('taskId');
-    const taskToMove = tasks.find(t => t.id === taskId);
+    const taskToMove = tasks.find(t => t.id === parseInt(taskId, 10));
     if (taskToMove && taskToMove.status !== newStatus) {
       onUpdateTask({ ...taskToMove, status: newStatus });
     }

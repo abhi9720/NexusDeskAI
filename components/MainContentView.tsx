@@ -32,10 +32,10 @@ interface MainContentViewProps {
   onSelectItem: (item: Task | Note) => void;
   onUpdateItem: (item: Task | Note) => void;
   onAddSavedFilter: (name: string, filter: TaskFilter) => void;
-  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => void;
+  onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => void;
   onUpdateList: (list: List) => void;
   onStartFocus: (task: Task) => void;
-  onOpenAddItemPane: (listId: string, type: 'task' | 'note') => void;
+  onOpenAddItemPane: (listId: number, type: 'task' | 'note') => void;
   customFieldDefinitions: CustomFieldDefinition[];
 }
 

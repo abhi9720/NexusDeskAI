@@ -35,7 +35,7 @@ const TaskCard = ({ task, onClick, onDragStart, onStartFocus }: { task: Task; on
     return (
         <div
             draggable
-            onDragStart={(e) => onDragStart(e, task.id)}
+            onDragStart={(e) => onDragStart(e, String(task.id))}
             onClick={onClick}
             className="p-4 mb-4 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all group relative"
             role="button"
@@ -264,7 +264,7 @@ const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList, 
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: Status) => {
         const taskId = e.dataTransfer.getData('taskId');
-        const taskToMove = tasks.find(t => t.id === taskId);
+        const taskToMove = tasks.find(t => t.id === parseInt(taskId, 10));
         if (taskToMove && taskToMove.status !== newStatus) {
             onUpdateTask({ ...taskToMove, status: newStatus });
         }

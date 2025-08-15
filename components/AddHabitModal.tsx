@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Habit, Goal, HabitFrequency } from '../types';
 import { XMarkIcon, CheckBadgeIcon } from './icons';
 
 interface AddHabitModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (habit: Habit) => void;
+  onSave: (habit: Omit<Habit, 'id'> & { id?: number }) => void;
   habitToEdit: Habit | null;
   goals: Goal[];
 }
@@ -18,7 +17,7 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit, goals }: AddHabit
   const [name, setName] = useState('');
   const [frequencyType, setFrequencyType] = useState<'daily' | 'weekly'>('daily');
   const [selectedDays, setSelectedDays] = useState<Set<Day>>(new Set());
-  const [linkedGoalId, setLinkedGoalId] = useState<string | null>(null);
+  const [linkedGoalId, setLinkedGoalId] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,13 +67,18 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit, goals }: AddHabit
         frequency = Array.from(selectedDays);
     }
 
-    const habitData: Habit = {
-      id: habitToEdit?.id || uuidv4(),
+    const habitData = {
       name,
       frequency,
       linkedGoalId,
     };
-    onSave(habitData);
+
+    if (habitToEdit) {
+        onSave({ ...habitToEdit, ...habitData });
+    } else {
+        onSave(habitData);
+    }
+    
     onClose();
   };
 
@@ -119,7 +123,7 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit, goals }: AddHabit
           </div>
           <div>
             <label htmlFor="habit-linked-goal" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Link to Goal (Optional)</label>
-            <select id="habit-linked-goal" value={linkedGoalId || ''} onChange={e => setLinkedGoalId(e.target.value || null)} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary">
+            <select id="habit-linked-goal" value={linkedGoalId || ''} onChange={e => setLinkedGoalId(e.target.value ? Number(e.target.value) : null)} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary">
               <option value="">None</option>
               {goals.map(goal => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
             </select>

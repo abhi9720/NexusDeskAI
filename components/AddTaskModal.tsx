@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Task, Priority, Attachment, ChecklistItem } from '../types';
 import { XMarkIcon, PaperClipIcon, TrashIcon, PlusIcon, TagIcon } from './icons';
 import { fileService } from '../services/storageService';
@@ -10,7 +9,9 @@ interface AddTaskModalProps {
   onAddTask: (task: Partial<Task>) => void;
 }
 
-const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
+const newId = () => Date.now() + Math.floor(Math.random() * 1000);
+
+const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: number) => void }) => {
     const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
@@ -78,7 +79,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
           const savedPathOrDataUrl = await fileService.saveAttachment(file);
           
           const newAttachment: Attachment = {
-              id: uuidv4(),
+              id: newId(),
               name: file.name,
               type: file.type,
               url: savedPathOrDataUrl,
@@ -87,14 +88,14 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
       }
   };
   
-  const removeAttachment = (id: string) => {
+  const removeAttachment = (id: number) => {
       setAttachments(prev => prev.filter(att => att.id !== id));
   }
 
   const handleAddChecklistItem = () => {
     if (checklistItemText.trim()) {
         const newItem: ChecklistItem = {
-            id: uuidv4(),
+            id: newId(),
             text: checklistItemText.trim(),
             completed: false,
         };
@@ -103,7 +104,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
     }
   };
 
-  const handleRemoveChecklistItem = (id: string) => {
+  const handleRemoveChecklistItem = (id: number) => {
     setChecklist(checklist.filter(item => item.id !== id));
   };
   
@@ -137,14 +138,14 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
     let finalChecklist = [...checklist];
     if (checklistItemText.trim()) {
         const newItem: ChecklistItem = {
-            id: uuidv4(),
+            id: newId(),
             text: checklistItemText.trim(),
             completed: false,
         };
         finalChecklist.push(newItem);
     }
 
-    onAddTask({ listId: '1', title, description, dueDate, priority, tags, attachments, checklist: finalChecklist, comments: [] });
+    onAddTask({ listId: 1, title, description, dueDate, priority, tags, attachments, checklist: finalChecklist, comments: [] });
     onClose();
   };
 

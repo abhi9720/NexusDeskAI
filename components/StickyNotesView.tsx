@@ -8,7 +8,7 @@ interface StickyNotesViewProps {
     notes: StickyNote[];
     onAddNote: () => void;
     onUpdateNote: (note: StickyNote) => void;
-    onDeleteNote: (id: string) => void;
+    onDeleteNote: (id: number) => void;
 }
 
 const StickyNotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: StickyNotesViewProps) => {

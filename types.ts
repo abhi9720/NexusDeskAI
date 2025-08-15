@@ -3,7 +3,7 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface CustomTheme {
-  id: string;
+  id: string; // Stays string as it's not in the main DB
   name: string;
   colors: {
     primary: string;      // Accent
@@ -19,17 +19,17 @@ export interface CustomTheme {
 export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'checkbox';
 
 export interface CustomFieldOption {
-  id: string;
+  id: number;
   value: string;
   color?: string;
 }
 
 export interface CustomFieldDefinition {
-  id: string;
+  id: number;
   name: string;
   type: CustomFieldType;
   options?: CustomFieldOption[]; // for 'select' type
-  listId: string | null; // null for global, or a specific task list ID
+  listId: number | null; // null for global, or a specific task list ID
 }
 
 
@@ -40,7 +40,7 @@ export interface ListStatusMapping {
 }
 
 export interface List {
-  id: string;
+  id: number;
   name: string;
   color: string;
   type: 'task' | 'note';
@@ -56,13 +56,13 @@ export interface TaskFilter {
 }
 
 export interface SavedFilter {
-  id: string;
+  id: number;
   name: string;
   filter: TaskFilter;
 }
 
 export interface StickyNote {
-    id: string;
+    id: number;
     title: string;
     content: string;
     color: string;
@@ -71,26 +71,26 @@ export interface StickyNote {
 
 // --- New Goal & Habit Tracking Types ---
 export interface Goal {
-    id: string;
+    id: number;
     title: string;
     vision: string; // The "why"
     targetDate: string; // ISO string
-    linkedProjectId: string | null; // Link to a project for automatic progress
+    linkedProjectId: number | null; // Link to a project for automatic progress
     imageUrl?: string; // For a vision board feel
 }
 
 export type HabitFrequency = 'daily' | ('mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun')[];
 
 export interface Habit {
-    id: string;
+    id: number;
     name: string;
     frequency: HabitFrequency;
-    linkedGoalId: string | null;
+    linkedGoalId: number | null;
 }
 
 export interface HabitLog {
-    id: string;
-    habitId: string;
+    id: number;
+    habitId: number;
     date: string; // 'YYYY-MM-DD'
     completed: boolean;
 }
@@ -99,10 +99,10 @@ export interface HabitLog {
 export type ActiveSelection = 
   | { type: 'dashboard' }
   | { type: 'smart-list', id: 'today' | 'next-7-days' }
-  | { type: 'list'; id: string }
+  | { type: 'list'; id: number }
   | { type: 'tag'; id: string }
   | { type: 'sticky-notes' }
-  | { type: 'saved-filter', id: string }
+  | { type: 'saved-filter', id: number }
   | { type: 'calendar' }
   | { type: 'ai-chat' }
   | { type: 'momentum' }
@@ -126,20 +126,20 @@ export enum Status {
 }
 
 export interface Attachment {
-  id: string;
+  id: number;
   name: string;
   type: string; // MIME type
   url: string; // Data URL
 }
 
 export interface ChecklistItem {
-  id: string;
+  id: number;
   text: string;
   completed: boolean;
 }
 
 export interface Comment {
-  id: string;
+  id: number;
   content: string;
   createdAt: string;
   userName: string;
@@ -149,7 +149,7 @@ export interface Comment {
 export type ActivityType = 'created' | 'status' | 'priority' | 'comment';
 
 export interface ActivityLog {
-  id: string;
+  id: number;
   type: ActivityType;
   content: {
       from?: string; // e.g., 'To Do'
@@ -162,8 +162,8 @@ export interface ActivityLog {
 }
 
 export interface Task {
-  id:string;
-  listId: string;
+  id: number;
+  listId: number;
   title: string;
   description:string;
   status: Status;
@@ -175,12 +175,12 @@ export interface Task {
   checklist: ChecklistItem[];
   comments: Comment[];
   activityLog: ActivityLog[];
-  customFields: { [fieldId: string]: any }; // For string, number, date string, optionId, or boolean
+  customFields: { [fieldId: number]: any }; // For string, number, date string, optionId, or boolean
 }
 
 export interface Note {
-  id:string;
-  listId: string;
+  id: number;
+  listId: number;
   title: string;
   content: string;
   tags: string[];
@@ -216,7 +216,7 @@ export interface ToolCall {
 }
 
 export interface ChatMessage {
-  id: string;
+  id: number;
   role: 'user' | 'model';
   text: string;
   toolCalls?: ToolCall[];
@@ -229,7 +229,7 @@ export interface ChatMessage {
 }
 
 export interface ChatSession {
-  id: string;
+  id: number;
   title: string;
   messages: ChatMessage[];
   createdAt: string;

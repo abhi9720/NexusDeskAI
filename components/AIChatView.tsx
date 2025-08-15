@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatSession, Task, Note, ActiveSelection } from '../types';
 import { SparklesIcon, ArrowUpIcon, UserCircleIcon, PlusIcon, HistoryIcon, EllipsisHorizontalIcon, MicrophoneIcon } from './icons';
+import VoiceInputModal from './VoiceInputModal';
 
 // In-browser speech recognition can be inconsistent, so we declare the type to avoid TS errors
 declare global {
@@ -33,8 +34,8 @@ interface AIChatViewProps {
     sessions: ChatSession[];
     onSendMessage: (message: string) => Promise<void>;
     onNewChat: () => void;
-    onSelectChatSession: (sessionId: string) => void;
-    onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Promise<Task | Note>;
+    onSelectChatSession: (sessionId: number) => void;
+    onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => Promise<Task | Note>;
     onDetailItemChange: (item: Task | Note | null) => void;
     onActiveSelectionChange: (selection: ActiveSelection) => void;
     activeSelection: ActiveSelection;
@@ -60,12 +61,11 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-    const [isListening, setIsListening] = useState(false);
+    const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const historyMenuRef = useRef<HTMLDivElement>(null);
-    const recognitionRef = useRef<any>(null);
-
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const chatHistory = useMemo(() => {
         return sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -97,54 +97,6 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [historyMenuRef]);
-    
-     useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.warn("Speech recognition not supported in this browser.");
-            return;
-        }
-
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = (event: any) => {
-            let finalTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
-                }
-            }
-            if (finalTranscript) {
-              setInput(prev => prev.trim() + ' ' + finalTranscript.trim());
-            }
-        };
-
-        recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = (event: any) => {
-            console.error("Speech recognition error", event.error);
-            setIsListening(false);
-        };
-        
-        recognitionRef.current = recognition;
-
-        return () => {
-          recognition.stop();
-        }
-    }, []);
-
-    const handleToggleListening = () => {
-      if (!recognitionRef.current) return;
-      if (isListening) {
-          recognitionRef.current.stop();
-      } else {
-          recognitionRef.current.start();
-      }
-    };
-
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -164,10 +116,15 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         }
     };
 
-    const handleExampleClick = async (prompt: string) => {
+    const handleExampleClick = (prompt: string) => {
         if (isLoading) return;
         setInput(prompt);
-        // await handleSendMessage({ preventDefault: () => {} } as React.FormEvent);
+    };
+
+    const handleTranscriptComplete = (transcript: string) => {
+        setInput(transcript);
+        setIsVoiceModalOpen(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
     };
 
     return (
@@ -247,6 +204,7 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
             <div className="p-4 border-t border-gray-200 dark:border-gray-700/80">
                 <form onSubmit={handleSendMessage} className="relative">
                     <textarea
+                        ref={inputRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -262,11 +220,8 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
                     />
                      <button
                         type="button"
-                        onClick={handleToggleListening}
-                        disabled={!recognitionRef.current}
-                        className={`absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                            isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300'
-                        }`}
+                        onClick={() => setIsVoiceModalOpen(true)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300"
                         title="Use voice input"
                     >
                         <MicrophoneIcon className="w-5 h-5" />
@@ -280,6 +235,11 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
                     </button>
                 </form>
             </div>
+            <VoiceInputModal
+                isOpen={isVoiceModalOpen}
+                onClose={() => setIsVoiceModalOpen(false)}
+                onComplete={handleTranscriptComplete}
+            />
         </div>
     );
 };

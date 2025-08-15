@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Task, Note, TaskAnalysis, NoteAnalysis, Priority, Status, Attachment, ChecklistItem, Comment, CustomFieldDefinition, List } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon, CrosshairIcon } from './icons';
 import { analyzeTaskAndSuggestSubtasks, summarizeAndTagNote, suggestTaskPriority } from '../services/geminiService';
@@ -7,13 +6,15 @@ import { format, isPast, isToday } from 'date-fns';
 import RichTextEditor from './RichTextEditor';
 import { fileService } from '../services/storageService';
 
+const newId = () => Date.now() + Math.floor(Math.random() * 1000);
+
 const priorityColors: Record<Priority, string> = {
   [Priority.High]: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
   [Priority.Medium]: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200',
   [Priority.Low]: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200',
 };
 
-const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: string) => void, isPreview: boolean }) => {
+const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: number) => void, isPreview: boolean }) => {
     const baseClasses = "relative group p-2 rounded-lg";
     const bgClass = isPreview ? 'bg-gray-100 dark:bg-gray-700/50' : 'bg-white dark:bg-gray-800';
     const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
@@ -77,13 +78,13 @@ interface DetailPaneProps {
   list?: List;
   onClose: () => void;
   onUpdate: (item: Task | Note) => void;
-  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => void;
-  onDelete: (itemId: string, type: 'task' | 'note') => void;
-  onAddComment: (taskId: string, content: string) => void;
+  onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => void;
+  onDelete: (itemId: number, type: 'task' | 'note') => void;
+  onAddComment: (taskId: number, content: string) => void;
   onStartFocus: (task: Task) => void;
   customFieldDefinitions: CustomFieldDefinition[];
   itemTypeToAdd?: 'task' | 'note';
-  listIdToAdd?: string;
+  listIdToAdd?: number;
 }
 
 const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddComment, onStartFocus, customFieldDefinitions, itemTypeToAdd, listIdToAdd }: DetailPaneProps) => {
@@ -95,7 +96,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
         if (!isAdding) return item!;
         
         const base = {
-            id: uuidv4(), // temporary id
+            id: newId(), // temporary id
             title: '',
             tags: [],
             attachments: [],
@@ -199,7 +200,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
             const analysisText = `\n\n<hr>\n<h3>AI Analysis</h3>\n<p><strong>Summary:</strong> ${taskAnalysis.summary}</p>\n<p><strong>Complexity:</strong> ${taskAnalysis.complexity}</p>\n<p><strong>Skills Required:</strong> ${taskAnalysis.requiredSkills.join(', ')}</p>`;
             
             const newChecklistItems: ChecklistItem[] = taskAnalysis.subtasks.map(sub => ({
-                id: uuidv4(),
+                id: newId(),
                 text: `${sub.title} (${sub.hours}h)`,
                 completed: false,
             }));
@@ -238,7 +239,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
         
         let finalItem: Partial<Task & Note> = { ...editedItem };
         if (isTask && checklistItemText.trim()) {
-            const newItem = { id: uuidv4(), text: checklistItemText.trim(), completed: false };
+            const newItem: ChecklistItem = { id: newId(), text: checklistItemText.trim(), completed: false };
             (finalItem as Task).checklist = [...(finalItem as Task).checklist, newItem];
             setChecklistItemText('');
         }
@@ -266,7 +267,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
         setEditedItem(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleCustomFieldChange = (fieldId: string, value: any) => {
+    const handleCustomFieldChange = (fieldId: number, value: any) => {
         const currentCustomFields = (editedItem as Task).customFields || {};
         handleFieldChange('customFields', {
             ...currentCustomFields,
@@ -281,7 +282,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
         }
     };
 
-    const handleToggleChecklistItem = (itemId: string, isFromEditMode: boolean) => {
+    const handleToggleChecklistItem = (itemId: number, isFromEditMode: boolean) => {
         if (!isTask) return;
         const list = isFromEditMode ? (editedItem as Task).checklist : (item as Task).checklist;
         const updatedChecklist = list.map(ci => 
@@ -297,13 +298,13 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
     
     const handleAddChecklistItem = () => {
         if(isTask && checklistItemText.trim()){
-            const newItem = { id: uuidv4(), text: checklistItemText.trim(), completed: false };
+            const newItem: ChecklistItem = { id: newId(), text: checklistItemText.trim(), completed: false };
             handleFieldChange('checklist', [...(editedItem as Task).checklist, newItem]);
             setChecklistItemText('');
         }
     };
 
-    const handleRemoveChecklistItem = (id: string) => {
+    const handleRemoveChecklistItem = (id: number) => {
         if (isTask) {
             handleFieldChange('checklist', (editedItem as Task).checklist.filter(ci => ci.id !== id));
         }
@@ -338,7 +339,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
           }
           const savedPathOrDataUrl = await fileService.saveAttachment(file);
           const newAttachment: Attachment = {
-              id: uuidv4(),
+              id: newId(),
               name: file.name,
               type: file.type,
               url: savedPathOrDataUrl,
@@ -347,19 +348,19 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
       }
     };
     
-    const removeAttachment = (id: string) => {
+    const removeAttachment = (id: number) => {
       handleFieldChange('attachments', editedItem.attachments.filter(att => att.id !== id));
     }
 
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        if (!isAdding && 'status' in item) { 
-            onUpdate({ ...item, status: e.target.value as Status });
+        if (!isAdding && 'status' in item!) { 
+            onUpdate({ ...item, status: e.target.value as Status } as Task);
         }
     };
 
     const handlePriorityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        if (!isAdding && 'priority' in item) { 
-            onUpdate({ ...item, priority: e.target.value as Priority });
+        if (!isAdding && 'priority' in item!) { 
+            onUpdate({ ...item, priority: e.target.value as Priority } as Task);
         }
     };
 

@@ -11,11 +11,11 @@ interface MomentumViewProps {
   habitLogs: HabitLog[];
   tasks: Task[];
   lists: List[];
-  onUpsertGoal: (goal: Goal) => void;
-  onDeleteGoal: (goalId: string) => void;
-  onUpsertHabit: (habit: Habit) => void;
-  onDeleteHabit: (habitId: string) => void;
-  onToggleHabitLog: (habitId: string, date: Date) => void;
+  onUpsertGoal: (goal: Omit<Goal, 'id'> & { id?: number }) => void;
+  onDeleteGoal: (goalId: number) => void;
+  onUpsertHabit: (habit: Omit<Habit, 'id'> & { id?: number }) => void;
+  onDeleteHabit: (habitId: number) => void;
+  onToggleHabitLog: (habitId: number, date: Date) => void;
 }
 
 const MomentumView = (props: MomentumViewProps) => {

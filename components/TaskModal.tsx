@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Task, TaskAnalysis, Priority, Status, Attachment, ChecklistItem } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon } from './icons';
 import { analyzeTaskAndSuggestSubtasks } from '../services/geminiService';
@@ -9,8 +8,10 @@ interface TaskModalProps {
   task: Task | null;
   onClose: () => void;
   onUpdateTask: (task: Task) => void;
-  onDeleteTask: (taskId: string) => void;
+  onDeleteTask: (taskId: number) => void;
 }
+
+const newId = () => Date.now() + Math.floor(Math.random() * 1000);
 
 const priorityColors: Record<Priority, string> = {
   [Priority.High]: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
@@ -77,7 +78,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
     }
   };
 
-  const handleToggleChecklistItem = (itemId: string) => {
+  const handleToggleChecklistItem = (itemId: number) => {
     const updatedChecklist = task.checklist.map(item => 
         item.id === itemId ? { ...item, completed: !item.completed } : item
     );
@@ -93,7 +94,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
   const handleAddChecklistItem = () => {
     if (checklistItemText.trim() && editedTask) {
         const newItem: ChecklistItem = {
-            id: uuidv4(),
+            id: newId(),
             text: checklistItemText.trim(),
             completed: false,
         };
@@ -102,7 +103,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
     }
   };
 
-  const handleRemoveChecklistItem = (id: string) => {
+  const handleRemoveChecklistItem = (id: number) => {
     if (editedTask) {
         setEditedTask({ ...editedTask, checklist: editedTask.checklist.filter(item => item.id !== id) });
     }
@@ -113,7 +114,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
           let finalTask = { ...editedTask };
           if (checklistItemText.trim()) {
               const newItem: ChecklistItem = {
-                  id: uuidv4(),
+                  id: newId(),
                   text: checklistItemText.trim(),
                   completed: false,
               };

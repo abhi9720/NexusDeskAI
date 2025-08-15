@@ -7,7 +7,7 @@ interface NotesViewProps {
   notes: Note[];
   onAddNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateNote: (note: Omit<Note, 'updatedAt'>) => void;
-  onDeleteNote: (noteId: string) => void;
+  onDeleteNote: (noteId: number) => void;
 }
 
 const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {

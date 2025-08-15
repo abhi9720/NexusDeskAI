@@ -96,7 +96,7 @@ const TasksDueToday = ({ tasks, onTaskClick }: { tasks: Task[], onTaskClick: (ta
     );
 };
 
-const ProjectProgress = ({ lists, tasks, onProjectClick }: { lists: List[], tasks: Task[], onProjectClick: (listId: string) => void }) => (
+const ProjectProgress = ({ lists, tasks, onProjectClick }: { lists: List[], tasks: Task[], onProjectClick: (listId: number) => void }) => (
     <div className="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
         <h3 className="font-semibold text-lg text-gray-800 dark:text-white mb-4">Project Progress</h3>
         <div className="space-y-4">
@@ -146,7 +146,7 @@ const DashboardView = ({ tasks, lists, notes, onSelectItem, onActiveSelectionCha
         onActiveSelectionChange({ type: 'ai-chat' });
     };
 
-    const handleProjectClick = (listId: string) => {
+    const handleProjectClick = (listId: number) => {
         onActiveSelectionChange({ type: 'list', id: listId });
     };
 

@@ -7,7 +7,7 @@ interface DashboardProps {
     tasks: Task[];
     lists: List[];
     onTaskClick: (task: Task) => void;
-    onProjectClick: (listId: string) => void;
+    onProjectClick: (listId: number) => void;
 }
 
 const Dashboard = ({ tasks, lists, onTaskClick, onProjectClick }: DashboardProps) => {

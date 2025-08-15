@@ -6,7 +6,7 @@ import { parseTasksFromText } from '../services/geminiService';
 interface AITaskParserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddItem: (item: Partial<Task>, listId: string, type: 'task') => void;
+  onAddItem: (item: Partial<Task>, listId: number, type: 'task') => void;
   lists: List[];
 }
 
@@ -19,7 +19,7 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
     const [inputText, setInputText] = useState('');
     const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
     const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
-    const [targetListId, setTargetListId] = useState<string>('');
+    const [targetListId, setTargetListId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -28,18 +28,18 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
             const taskLists = lists.filter(l => l.type === 'task');
             if (taskLists.length > 0) {
                 const isTargetListValid = taskLists.some(list => list.id === targetListId);
-                if (!targetListId || !isTargetListValid) {
+                if (targetListId === null || !isTargetListValid) {
                     setTargetListId(taskLists[0].id);
                 }
             } else {
-                setTargetListId('');
+                setTargetListId(null);
             }
         } else {
             // Reset all state on close for a fresh start next time
             setInputText('');
             setParsedTasks([]);
             setSelectedTasks(new Set());
-            setTargetListId('');
+            setTargetListId(null);
             setIsLoading(false);
             setError(null);
         }
@@ -77,7 +77,7 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
     };
 
     const handleAddTasks = () => {
-        if (!targetListId) {
+        if (targetListId === null) {
             alert('Please select a list to add tasks to.');
             return;
         }
@@ -166,7 +166,7 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
                 <footer className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center gap-4 flex-shrink-0">
                     <div className="flex items-center gap-2">
                          <label htmlFor="list-select" className="text-sm font-medium">Add to list:</label>
-                         <select id="list-select" value={targetListId} onChange={e => setTargetListId(e.target.value)} className="form-select text-sm rounded-lg bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
+                         <select id="list-select" value={targetListId || ''} onChange={e => setTargetListId(Number(e.target.value))} className="form-select text-sm rounded-lg bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
                             {taskLists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}
                          </select>
                     </div>

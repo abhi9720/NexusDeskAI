@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { v4 as uuidv4 } from 'uuid';
+import { useTheme } from '../context/ThemeContext';
 import { ThemeMode, CustomTheme, CustomFieldDefinition, CustomFieldType, List, CustomFieldOption } from '../types';
 import { SunIcon, MoonIcon, ComputerDesktopIcon, UserCircleIcon, KeyIcon, PaletteIcon, CheckCircleIcon, GithubIcon, LinkedinIcon, PlusIcon, TrashIcon, PencilIcon, XMarkIcon, ListBulletIcon } from './icons';
+
+const newId = () => Date.now() + Math.floor(Math.random() * 1000);
 
 // Add/Edit Theme Modal (Inlined)
 const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boolean, onClose: () => void, onSave: (theme: CustomTheme) => void, themeToEdit: CustomTheme | null }) => {
@@ -75,7 +77,7 @@ const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boole
 const AddCustomFieldModal = ({ isOpen, onClose, onSave, fieldToEdit, lists }: { isOpen: boolean, onClose: () => void, onSave: (field: CustomFieldDefinition) => void, fieldToEdit: CustomFieldDefinition | null, lists: List[] }) => {
     const [name, setName] = useState('');
     const [type, setType] = useState<CustomFieldType>('text');
-    const [listId, setListId] = useState<string | null>(null);
+    const [listId, setListId] = useState<number | null>(null); 
     const [options, setOptions] = useState<CustomFieldOption[]>([]);
     const [newOption, setNewOption] = useState('');
     
@@ -100,7 +102,7 @@ const AddCustomFieldModal = ({ isOpen, onClose, onSave, fieldToEdit, lists }: { 
     
     const handleAddOption = () => {
         if (newOption.trim()) {
-            setOptions([...options, { id: uuidv4(), value: newOption.trim() }]);
+            setOptions([...options, { id: newId(), value: newOption.trim() }]);
             setNewOption('');
         }
     };
@@ -108,7 +110,7 @@ const AddCustomFieldModal = ({ isOpen, onClose, onSave, fieldToEdit, lists }: { 
     const handleSave = () => {
         if (!name.trim()) return;
         const finalOptions = type === 'select' ? options.filter(o => o.value.trim() !== '') : undefined;
-        onSave({ id: fieldToEdit?.id || uuidv4(), name, type, listId, options: finalOptions });
+        onSave({ id: fieldToEdit?.id || newId(), name, type, listId, options: finalOptions });
         onClose();
     };
 
@@ -125,7 +127,7 @@ const AddCustomFieldModal = ({ isOpen, onClose, onSave, fieldToEdit, lists }: { 
                         <option value="select">Select</option>
                         <option value="checkbox">Checkbox</option>
                     </select>
-                    <select value={listId || 'global'} onChange={e => setListId(e.target.value === 'global' ? null : e.target.value)} className="w-full form-select rounded-md bg-gray-100 dark:bg-gray-700 border-transparent focus:ring-primary">
+                    <select value={listId === null ? 'global' : listId} onChange={e => setListId(e.target.value === 'global' ? null : Number(e.target.value))} className="w-full form-select rounded-md bg-gray-100 dark:bg-gray-700 border-transparent focus:ring-primary">
                         <option value="global">Global (all task lists)</option>
                         {lists.filter(l => l.type === 'task').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
@@ -268,7 +270,7 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
         }
     };
     
-    const handleDeleteField = (id: string) => {
+    const handleDeleteField = (id: number) => {
         setCustomFieldDefinitions(customFieldDefinitions.filter(f => f.id !== id));
     };
 

@@ -20,37 +20,37 @@ interface AppLayoutProps {
   savedFilters: SavedFilter[];
   stickyNotes: StickyNote[];
   chatSessions: ChatSession[];
-  activeChatSessionId: string | null;
+  activeChatSessionId: number | null;
   onSendMessage: (message: string) => Promise<void>;
   onNewChat: () => void;
-  onSelectChatSession: (sessionId: string) => void;
+  onSelectChatSession: (sessionId: number) => void;
   activeSelection: ActiveSelection;
   onActiveSelectionChange: (selection: ActiveSelection) => void;
   detailItem: Task | Note | null;
   onDetailItemChange: (item: Task | Note | null) => void;
-  addingItemInfo: { type: 'task' | 'note', listId: string } | null;
-  onOpenAddItemPane: (listId: string, type: 'task' | 'note') => void;
+  addingItemInfo: { type: 'task' | 'note', listId: number } | null;
+  onOpenAddItemPane: (listId: number, type: 'task' | 'note') => void;
   onCloseDetailPane: () => void;
   onAddList: (list: Omit<List, 'id' | 'statuses'>) => void;
   onUpdateList: (list: List) => void;
-  onDeleteList: (listId: string) => void;
-  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Promise<Task | Note>;
+  onDeleteList: (listId: number) => void;
+  onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => Promise<Task | Note>;
   onUpdateItem: (item: Task | Note) => void;
-  onDeleteItem: (itemId: string, type: 'task' | 'note') => void;
-  onAddComment: (taskId: string, content: string) => void;
+  onDeleteItem: (itemId: number, type: 'task' | 'note') => void;
+  onAddComment: (taskId: number, content: string) => void;
   onAddSavedFilter: (name: string, filter: TaskFilter) => void;
-  onDeleteSavedFilter: (filterId: string) => void;
+  onDeleteSavedFilter: (filterId: number) => void;
   onAddStickyNote: () => void;
   onUpdateStickyNote: (note: StickyNote) => void;
-  onDeleteStickyNote: (id: string) => void;
+  onDeleteStickyNote: (id: number) => void;
   goals: Goal[];
   habits: Habit[];
   habitLogs: HabitLog[];
-  onUpsertGoal: (goal: Goal) => void;
-  onDeleteGoal: (goalId: string) => void;
-  onUpsertHabit: (habit: Habit) => void;
-  onDeleteHabit: (habitId: string) => void;
-  onToggleHabitLog: (habitId: string, date: Date) => void;
+  onUpsertGoal: (goal: Omit<Goal, 'id'> & { id?: number }) => void;
+  onDeleteGoal: (goalId: number) => void;
+  onUpsertHabit: (habit: Omit<Habit, 'id'> & { id?: number }) => void;
+  onDeleteHabit: (habitId: number) => void;
+  onToggleHabitLog: (habitId: number, date: Date) => void;
   userName: string;
   apiKey: string | null;
   onUpdateUser: (name: string) => void;
@@ -207,7 +207,7 @@ const AppLayout = (props: AppLayoutProps) => {
               onDelete={props.onDeleteItem}
               onAddComment={props.onAddComment}
               onStartFocus={onStartFocus}
-              customFieldDefinitions={customFieldDefinitions}
+              customFieldDefinitions={props.customFieldDefinitions}
               key={detailItem?.id || 'add-pane'}
           />
         </>
