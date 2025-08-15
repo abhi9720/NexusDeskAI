@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Goal, Habit, HabitLog, Task, List, Status } from '../types';
-import { PlusIcon, TrophyIcon, CheckBadgeIcon, PencilIcon, TrashIcon, CheckIcon } from './icons';
+import { PlusIcon, CheckBadgeIcon, PencilIcon, TrashIcon, CheckIcon, CrosshairIcon, TrophyIcon } from './icons';
 import { format, subDays, isSameDay, getDay } from 'date-fns';
 import AddGoalModal from './AddGoalModal';
 import AddHabitModal from './AddHabitModal';
@@ -63,7 +63,7 @@ const MomentumView = (props: MomentumViewProps) => {
         </div>
         <div className="flex items-center space-x-2">
           <button onClick={() => openGoalModal(null)} className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold bg-primary text-white rounded-lg shadow-sm hover:bg-primary-dark transition-transform transform hover:scale-105">
-            <TrophyIcon className="w-5 h-5" />
+            <CrosshairIcon className="w-5 h-5" />
             <span>Add Goal</span>
           </button>
           <button onClick={() => openHabitModal(null)} className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg shadow-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-transform transform hover:scale-105">

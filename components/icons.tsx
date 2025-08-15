@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 
 export const Bars3Icon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -14,7 +14,7 @@ export const InboxIcon = ({ className }: { className?: string }) => (
 
 export const CalendarDaysIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0h18M-4.5 12h22.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0h18M3 12h18" />
   </svg>
 );
 
@@ -75,8 +75,8 @@ export const SparklesIcon = ({ className }: { className?: string }) => (
 );
 
 export const PlusIcon = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6" />
   </svg>
 );
 
@@ -204,6 +204,12 @@ export const ChevronRightIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+export const ChevronDoubleLeftIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+  </svg>
+);
+
 export const ChevronDoubleRightIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
@@ -238,6 +244,13 @@ export const LightBulbIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.311a7.5 7.5 0 01-7.5 0c1.433-.923 2.553-2.36 3-4.012a25.282 25.282 0 017.5 0c.446 1.651 1.566 3.089 3 4.011zM12 3a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0112 3zM8.25 6a.75.75 0 01.75-.75h6a.75.75 0 010 1.5h-6a.75.75 0 01-.75-.75zM12 6a.75.75 0 01.75.75v3.25m0 0a3.75 3.75 0 10-7.5 0 3.75 3.75 0 007.5 0zm-7.5 0h7.5" />
     </svg>
+);
+
+export const FlaskIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.405l-4.13 7.228A.75.75 0 006 16.5h12a.75.75 0 00.38-1.428l-4.13-7.228V3.104a2.25 2.25 0 00-3.375-.953.75.75 0 01-1.026.042 2.25 2.25 0 00-3.328.911z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 12.75h9" />
+  </svg>
 );
 
 export const PaletteIcon = ({ className }: { className?: string }) => (
@@ -352,5 +365,18 @@ export const GithubIcon = ({ className }: { className?: string }) => (
 export const LinkedinIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
         <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+    </svg>
+);
+
+export const CrosshairIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-2.25m0-13.5V3M21 12h-2.25m-13.5 0H3" />
+  </svg>
+);
+
+export const ExclamationTriangleIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
     </svg>
 );

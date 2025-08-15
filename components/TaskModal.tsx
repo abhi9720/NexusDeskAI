@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, TaskAnalysis, Priority, Status, Attachment, ChecklistItem } from '../types';
 import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon } from './icons';
@@ -39,14 +39,14 @@ const AttachmentDisplay = ({ attachment }: { attachment: Attachment }) => {
 }
 
 const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps) => {
-  const [analysis, setAnalysis] = useState<TaskAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedTask, setEditedTask] = useState<Task | null>(task);
-  const [checklistItemText, setChecklistItemText] = useState('');
+  const [analysis, setAnalysis] = React.useState<TaskAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editedTask, setEditedTask] = React.useState<Task | null>(task);
+  const [checklistItemText, setChecklistItemText] = React.useState('');
 
-  useEffect(() => {
+  React.useEffect(() => {
       // Reset state when a new task is selected
       setAnalysis(null);
       setIsAnalyzing(false);

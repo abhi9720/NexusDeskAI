@@ -10,7 +10,7 @@ const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {
     return (
         <div
             onClick={onClick}
-            className="p-5 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between"
+            className="p-5 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between"
             role="button"
             aria-label={`View note: ${note.title}`}
         >

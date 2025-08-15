@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, FunctionDeclaration, Part, Content } from "@google/genai";
 import { Task, TaskAnalysis, Note, NoteAnalysis, Priority, Status, ChatMessage, List } from '../types';
-import { isToday } from 'date-fns';
+import { format } from 'date-fns';
 
 
 let aiInstance: GoogleGenAI | null = null;
@@ -32,28 +32,41 @@ export const runChat = async (history: ChatMessage[], message: string, tasks: Ta
     const gemini = getAiInstance();
     if (!gemini) return { text: "AI is not configured. Please set your API key." };
 
-    const systemInstruction = `You are Prodify AI, a proactive and intelligent task management assistant. Your goal is to make task and note creation effortless by understanding the user's intent from natural text.
+    const systemInstruction = `You are Prodify AI, a proactive and intelligent task management assistant. Your goal is to make task management effortless by understanding the user's intent from natural language.
 
-    **Your Core Behaviors:**
+    **Your Core Capabilities:**
 
-    1.  **Understand & Extract:** From the user's message, identify: Task/Note title, description, due date, priority, and the target list. Use natural language understanding to infer missing details without asking unless essential.
-    2.  **Be Smart, Don't Re-ask:** If the user provides information, remember it. Only ask for essential missing details. For example, if a list isn't specified, ask them to choose from their existing lists.
-    3.  **Confirm Before Creating:** Before you use a tool to create an item, ALWAYS summarize what you're about to do and ask for the user's confirmation. For example: "Okay, I'll create a task titled 'Finish project report' in your 'Work' list with a high priority, due this Friday. Sound good?"
-    4.  **Be Context-Aware:** Before suggesting dates, be aware of the user's current workload. If a new task conflicts with existing deadlines, offer smart rescheduling suggestions.
+    1.  **Answering Questions About Tasks:** You have been provided with a complete list of the user's tasks in the "Context for Today" section. When a user asks a question like "what are my tasks for today?" or "list my high priority items", you MUST use this provided list to formulate a direct answer.
+        - **IMPORTANT:** Do not claim you cannot access tasks. You have been given all the necessary data.
+        - **DO NOT** use tools for answering questions. Synthesize the answer yourself.
+
+    2.  **Managing Tasks & Notes with Tools:** You can create, update, and delete tasks and notes using the provided tools.
+        - **Confirm Destructive Actions:** Before updating or deleting, always ask for confirmation.
+        - **Be Context-Aware:** Use the context to find item IDs when the user refers to them by name.
+        - **Handle Ambiguity:** Ask for clarification if a name is not unique.
 
     **Context for Today:**
-    - Today's Date: ${new Date().toLocaleDateString()}
-    - Overdue Tasks: ${tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== Status.Done).map(t => t.title).join(', ') || 'None'}
-    - Tasks Due Today: ${tasks.filter(t => isToday(new Date(t.dueDate)) && t.status !== Status.Done).map(t => t.title).join(', ') || 'None'}
-    - Available Task Lists: ${lists.filter(l => l.type === 'task').map(l => `"${l.name}" (id: ${l.id})`).join(', ')}
+    - Today's Date: ${format(new Date(), 'yyyy-MM-dd')}
+    - All Tasks: ${tasks.length > 0 ? tasks
+        .map(t => JSON.stringify({
+            id: t.id,
+            title: t.title,
+            description: t.description.substring(0, 50) + (t.description.length > 50 ? '...' : ''),
+            dueDate: t.dueDate ? format(new Date(t.dueDate), 'yyyy-MM-dd') : 'not set',
+            priority: t.priority,
+            status: t.status,
+            listId: t.listId
+        }))
+        .join(',\n') : 'No tasks found.'}
+    - Available Task Lists: ${lists.filter(l => l.type === 'task').map(l => `"${l.name}" (id: ${l.id})`).join(', ') || 'None'}
     - Available Note Lists: ${lists.filter(l => l.type === 'note').map(l => `"${l.name}" (id: ${l.id})`).join(', ')}
 
-    **Your Process:**
-    1.  User makes a request (e.g., "remind me to call John tomorrow").
-    2.  You extract details and ask for any missing *essential* information (e.g., "Sure. Which task list should I add 'Call John' to?").
-    3.  Once you have enough info, you CONFIRM with the user.
+    **Your Process for Tool Use:**
+    1.  User makes a request to create, update, or delete an item (e.g., "remind me to call John tomorrow", "mark 'Call John' as complete").
+    2.  You identify the task and its ID from the context.
+    3.  For updates/deletions, you CONFIRM with the user.
     4.  **Wait for their explicit confirmation** (e.g., "yes", "looks good", "do it").
-    5.  ONLY after confirmation, you call the appropriate function ('createTask' or 'createNote').
+    5.  ONLY after confirmation, you call the appropriate function ('createTask', 'updateTask', 'deleteTask').
     `;
 
     const tools: FunctionDeclaration[] = [
@@ -83,6 +96,41 @@ export const runChat = async (history: ChatMessage[], message: string, tasks: Ta
                     listId: { type: Type.STRING, description: "The ID of the list to add the note to. This is mandatory."}
                 },
                 required: ["title", "listId"],
+            }
+        },
+        {
+            name: "updateTask",
+            description: "Updates an existing task. Can be used to change its title, description, status, priority, or due date.",
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    taskId: { type: Type.STRING, description: "The ID of the task to update. This is mandatory." },
+                    title: { type: Type.STRING, description: "The new title for the task." },
+                    description: { type: Type.STRING, description: "The new description for the task." },
+                    status: { 
+                        type: Type.STRING, 
+                        description: "The new status for the task.",
+                        enum: Object.values(Status)
+                    },
+                    priority: {
+                        type: Type.STRING,
+                        description: "The new priority for the task.",
+                        enum: Object.values(Priority)
+                    },
+                    dueDate: { type: Type.STRING, description: "The new due date in YYYY-MM-DD format." }
+                },
+                required: ["taskId"],
+            }
+        },
+        {
+            name: "deleteTask",
+            description: "Deletes a task permanently. This action cannot be undone.",
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    taskId: { type: Type.STRING, description: "The ID of the task to delete. This is mandatory." }
+                },
+                required: ["taskId"],
             }
         }
     ];

@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
 import { Task, Status, Priority } from '../types';
-import { ClockIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon } from './icons';
+import { ClockIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon, CrosshairIcon } from './icons';
 import { isToday, isTomorrow, isPast, format } from 'date-fns';
 
 interface TaskListViewProps {
     tasks: Task[];
     onSelectTask: (task: Task) => void;
     onUpdateTask: (task: Task) => void;
-    groupBy: 'default' | 'priority' | 'status';
+    groupBy: 'default' | 'priority' | 'status' | 'tag';
+    onStartFocus: (task: Task) => void;
 }
 
 const priorityColors: Record<Priority, { dot: string, text: string }> = {
@@ -16,7 +17,7 @@ const priorityColors: Record<Priority, { dot: string, text: string }> = {
     [Priority.Low]: { dot: 'bg-green-500', text: 'text-green-500' },
 };
 
-const TaskListItem = ({ task, onUpdate, onSelect }: { task: Task; onUpdate: (task: Task) => void; onSelect: (task: Task) => void; }) => {
+const TaskListItem = ({ task, onUpdate, onSelect, onStartFocus }: { task: Task; onUpdate: (task: Task) => void; onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
     const handleToggleComplete = (e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
         const newStatus = e.target.checked ? Status.Done : Status.ToDo;
@@ -68,37 +69,63 @@ const TaskListItem = ({ task, onUpdate, onSelect }: { task: Task; onUpdate: (tas
                     )}
                 </div>
             </div>
+            <div className="ml-auto flex-shrink-0 flex items-center self-center pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={(e) => { e.stopPropagation(); onStartFocus(task); }}
+                    className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                    title="Focus on this task"
+                >
+                    <CrosshairIcon className="w-5 h-5" />
+                </button>
+            </div>
         </div>
     );
 };
 
-const TaskListGroup = ({ title, tasks, onUpdate, onSelect }: { title: string, tasks: Task[], onUpdate: (task: Task) => void; onSelect: (task: Task) => void; }) => {
+const TaskListGroup = ({ title, tasks, onUpdate, onSelect, onStartFocus }: { title: string, tasks: Task[], onUpdate: (task: Task) => void; onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
     if (tasks.length === 0) return null;
     return (
         <div className="mb-4">
             <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 px-4 py-2">{title}</h3>
             {tasks.map(task => (
-                <TaskListItem key={task.id} task={task} onUpdate={onUpdate} onSelect={onSelect} />
+                <TaskListItem key={task.id} task={task} onUpdate={onUpdate} onSelect={onSelect} onStartFocus={onStartFocus} />
             ))}
         </div>
     )
 };
 
 
-const TaskListView = ({ tasks, onSelectTask, onUpdateTask, groupBy }: TaskListViewProps) => {
+const TaskListView = ({ tasks, onSelectTask, onUpdateTask, groupBy, onStartFocus }: TaskListViewProps) => {
 
     const groupedTasks = useMemo(() => {
-        const groups: { [key: string]: Task[] } = {};
         if (groupBy === 'priority') {
+            const groups: { [key: string]: Task[] } = {};
             tasks.forEach(task => {
                 if (!groups[task.priority]) groups[task.priority] = [];
                 groups[task.priority].push(task);
             });
+            return groups;
         } else if (groupBy === 'status') {
+            const groups: { [key: string]: Task[] } = {};
              tasks.forEach(task => {
                 if (!groups[task.status]) groups[task.status] = [];
                 groups[task.status].push(task);
             });
+            return groups;
+        } else if (groupBy === 'tag') {
+            const tagGroups: { [key: string]: Task[] } = { 'Untagged': [] };
+            tasks.forEach(task => {
+                if (task.tags.length === 0) {
+                    tagGroups['Untagged'].push(task);
+                } else {
+                    task.tags.forEach(tag => {
+                        const groupKey = `#${tag}`;
+                        if (!tagGroups[groupKey]) tagGroups[groupKey] = [];
+                        tagGroups[groupKey].push(task);
+                    });
+                }
+            });
+            return tagGroups;
         } else { // default
             const dateGroups: Record<string, Task[]> = { overdue: [], today: [], tomorrow: [], upcoming: [], completed: [] };
             tasks.forEach(task => {
@@ -119,7 +146,6 @@ const TaskListView = ({ tasks, onSelectTask, onUpdateTask, groupBy }: TaskListVi
             });
             return dateGroups;
         }
-        return groups;
     }, [tasks, groupBy]);
     
     const groupOrder = useMemo(() => {
@@ -128,11 +154,17 @@ const TaskListView = ({ tasks, onSelectTask, onUpdateTask, groupBy }: TaskListVi
                 return [Priority.High, Priority.Medium, Priority.Low];
             case 'status':
                 return [Status.Backlog, Status.ToDo, Status.InProgress, Status.Review, Status.Waiting, Status.Done];
+            case 'tag':
+                const sortedTags = Object.keys(groupedTasks).sort();
+                if (sortedTags.includes('Untagged')) {
+                    return [...sortedTags.filter(t => t !== 'Untagged'), 'Untagged'];
+                }
+                return sortedTags;
             case 'default':
             default:
                 return ['overdue', 'today', 'tomorrow', 'upcoming', 'completed'];
         }
-    }, [groupBy]);
+    }, [groupBy, groupedTasks]);
 
     return (
         <div className="p-2">
@@ -147,6 +179,7 @@ const TaskListView = ({ tasks, onSelectTask, onUpdateTask, groupBy }: TaskListVi
                         tasks={tasksInGroup} 
                         onUpdate={onUpdateTask} 
                         onSelect={onSelectTask} 
+                        onStartFocus={onStartFocus}
                     />
                 );
             })}

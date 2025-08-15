@@ -1,13 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import * as React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, Priority, Attachment, ChecklistItem } from '../types';
-import { XMarkIcon, CameraIcon, VideoIcon, MicrophoneIcon, PaperClipIcon, TrashIcon, PlusIcon, TagIcon } from './icons';
+import { XMarkIcon, PaperClipIcon, TrashIcon, PlusIcon, TagIcon } from './icons';
 import { fileService } from '../services/storageService';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'status'>) => void;
+  onAddTask: (task: Partial<Task>) => void;
 }
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
@@ -36,22 +36,19 @@ const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, o
 }
 
 const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [priority, setPriority] = useState<Priority>(Priority.Medium);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
-  const [checklistItemText, setChecklistItemText] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
+  const [title, setTitle] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [dueDate, setDueDate] = React.useState('');
+  const [priority, setPriority] = React.useState<Priority>(Priority.Medium);
+  const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  const [checklist, setChecklist] = React.useState<ChecklistItem[]>([]);
+  const [checklistItemText, setChecklistItemText] = React.useState('');
+  const [tags, setTags] = React.useState<string[]>([]);
+  const [tagInput, setTagInput] = React.useState('');
   
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
       if (isOpen) {
           setTitle('');
           setDescription('');
@@ -151,20 +148,6 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
     onClose();
   };
 
-  const actionButtons: {
-    label: string;
-    icon: JSX.Element;
-    ref: React.RefObject<HTMLInputElement>;
-    accept: string;
-    capture?: 'user' | 'environment';
-    multiple?: boolean;
-  }[] = [
-      { label: 'Click photo', icon: <CameraIcon className="w-5 h-5"/>, ref: photoInputRef, accept: 'image/*', capture: 'environment' },
-      { label: 'Attach files', icon: <PaperClipIcon className="w-5 h-5"/>, ref: fileInputRef, accept: '*', multiple: true },
-      { label: 'Record video', icon: <VideoIcon className="w-5 h-5"/>, ref: videoInputRef, accept: 'video/*' },
-      { label: 'Record Audio', icon: <MicrophoneIcon className="w-5 h-5"/>, ref: audioInputRef, accept: 'audio/*' },
-  ];
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
       <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl p-8 w-full max-w-lg m-4 transform transition-all animate-fade-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -248,36 +231,25 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
           </div>
 
           <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Content</label>
-              <div className="grid grid-cols-2 gap-4">
-                  {actionButtons.map(btn => (
-                      <div key={btn.label}>
-                          <button type="button" onClick={() => btn.ref.current?.click()} className="w-full flex flex-col items-center justify-center p-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 transition-colors">
-                              {btn.icon}
-                              <span className="mt-1">{btn.label}</span>
-                          </button>
-                           <input
-                                type="file"
-                                ref={btn.ref}
-                                accept={btn.accept}
-                                capture={btn.capture}
-                                multiple={btn.multiple}
-                                onChange={handleFileChange}
-                                className="hidden"
-                            />
-                      </div>
-                  ))}
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
+            {attachments.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+                {attachments.map(att => <AttachmentPreview key={att.id} attachment={att} onRemove={removeAttachment} />)}
               </div>
+            )}
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg">
+                <PaperClipIcon className="w-4 h-4" />
+                Attach File
+            </button>
+            <input
+                type="file"
+                ref={fileInputRef}
+                accept="*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+            />
           </div>
-          
-          {attachments.length > 0 && (
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                       {attachments.map(att => <AttachmentPreview key={att.id} attachment={att} onRemove={removeAttachment} />)}
-                  </div>
-              </div>
-          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Task, Note, TaskAnalysis, NoteAnalysis, Priority, Status, Attachment, ChecklistItem, Comment } from '../types';
-import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, CameraIcon, VideoIcon, MicrophoneIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon } from './icons';
+import { Task, Note, TaskAnalysis, NoteAnalysis, Priority, Status, Attachment, ChecklistItem, Comment, CustomFieldDefinition, List } from '../types';
+import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon, CrosshairIcon } from './icons';
 import { analyzeTaskAndSuggestSubtasks, summarizeAndTagNote, suggestTaskPriority } from '../services/geminiService';
 import { format, isPast, isToday } from 'date-fns';
 import RichTextEditor from './RichTextEditor';
@@ -73,16 +73,57 @@ const MetadataItem = ({ icon, label, children }: { icon: React.ReactNode, label:
 );
 
 interface DetailPaneProps {
-  item: Task | Note;
+  item: Task | Note | null;
+  list?: List;
   onClose: () => void;
   onUpdate: (item: Task | Note) => void;
+  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => void;
   onDelete: (itemId: string, type: 'task' | 'note') => void;
   onAddComment: (taskId: string, content: string) => void;
+  onStartFocus: (task: Task) => void;
+  customFieldDefinitions: CustomFieldDefinition[];
+  itemTypeToAdd?: 'task' | 'note';
+  listIdToAdd?: string;
 }
 
-const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailPaneProps) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editedItem, setEditedItem] = useState(item);
+const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddComment, onStartFocus, customFieldDefinitions, itemTypeToAdd, listIdToAdd }: DetailPaneProps) => {
+    const isAdding = !item;
+
+    const [isEditing, setIsEditing] = useState(isAdding);
+    
+    const [editedItem, setEditedItem] = useState<Task | Note>(() => {
+        if (!isAdding) return item!;
+        
+        const base = {
+            id: uuidv4(), // temporary id
+            title: '',
+            tags: [],
+            attachments: [],
+            createdAt: new Date().toISOString(),
+            listId: listIdToAdd!,
+        };
+
+        if (itemTypeToAdd === 'task') {
+            return {
+                ...base,
+                description: '',
+                status: list?.statuses?.[0]?.status || Status.ToDo,
+                priority: Priority.Medium,
+                dueDate: new Date().toISOString(),
+                checklist: [],
+                comments: [],
+                activityLog: [],
+                customFields: {},
+            } as Task;
+        } else { // Note
+            return {
+                ...base,
+                content: '',
+                updatedAt: new Date().toISOString(),
+            } as Note;
+        }
+    });
+
     const [analysis, setAnalysis] = useState<TaskAnalysis | NoteAnalysis | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSuggestingPriority, setIsSuggestingPriority] = useState(false);
@@ -92,19 +133,33 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const [newComment, setNewComment] = useState('');
     const [isFullScreen, setIsFullScreen] = useState(false);
 
-    const photoInputRef = useRef<HTMLInputElement>(null);
-    const videoInputRef = useRef<HTMLInputElement>(null);
-    const audioInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        setEditedItem(item);
-        setIsEditing(false);
-        setAnalysis(null);
-        setError(null);
+        if (item) {
+            setEditedItem(item);
+            setIsEditing(false);
+            setAnalysis(null);
+            setError(null);
+        }
     }, [item]);
     
     const isTask = 'status' in editedItem;
+
+    const statusOptions = useMemo(() => {
+        if (isTask && list?.statuses && list.statuses.length > 0) {
+            return list.statuses;
+        }
+        return Object.values(Status).map(s => ({ status: s, name: s }));
+    }, [isTask, list]);
+
+    const applicableFields = useMemo(() => {
+        if (!isTask) return [];
+        return customFieldDefinitions.filter(
+            field => field.listId === null || field.listId === editedItem.listId
+        );
+    }, [customFieldDefinitions, editedItem, isTask]);
+
 
     const handleAnalyze = async () => {
         setIsAnalyzing(true);
@@ -181,23 +236,28 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             return;
         }
         
-        let finalItem = { ...editedItem };
+        let finalItem: Partial<Task & Note> = { ...editedItem };
         if (isTask && checklistItemText.trim()) {
             const newItem = { id: uuidv4(), text: checklistItemText.trim(), completed: false };
             (finalItem as Task).checklist = [...(finalItem as Task).checklist, newItem];
             setChecklistItemText('');
         }
 
-        onUpdate(finalItem);
-        setIsEditing(false);
+        if (isAdding) {
+            const { id, createdAt, ...newItemData } = finalItem as any; // remove temporary/unwanted fields
+            onAddItem(newItemData, listIdToAdd!, itemTypeToAdd!);
+        } else {
+            onUpdate(finalItem as Task | Note);
+            setIsEditing(false);
+        }
     };
     
-    const handleDelete = () => {
+    const handleDeleteClick = () => {
         onClose();
         setTimeout(() => {
-            if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
-                const type = 'status' in item ? 'task' : 'note';
-                onDelete(item.id, type);
+            if (window.confirm(`Are you sure you want to delete "${item!.title}"?`)) {
+                const type = 'status' in item! ? 'task' : 'note';
+                onDelete(item!.id, type);
             }
         }, 50);
     };
@@ -205,9 +265,17 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     const handleFieldChange = (field: string, value: any) => {
         setEditedItem(prev => ({ ...prev, [field]: value }));
     };
+
+    const handleCustomFieldChange = (fieldId: string, value: any) => {
+        const currentCustomFields = (editedItem as Task).customFields || {};
+        handleFieldChange('customFields', {
+            ...currentCustomFields,
+            [fieldId]: value
+        });
+    };
     
     const handlePostComment = () => {
-        if (newComment.trim() && isTask) {
+        if (newComment.trim() && isTask && item) {
             onAddComment(item.id, newComment.trim());
             setNewComment('');
         }
@@ -283,31 +351,48 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
       handleFieldChange('attachments', editedItem.attachments.filter(att => att.id !== id));
     }
 
-    const attachmentButtons = [
-      { label: 'Photo', icon: <CameraIcon className="w-5 h-5"/>, ref: photoInputRef, accept: 'image/*', capture: 'environment' },
-      { label: 'Video', icon: <VideoIcon className="w-5 h-5"/>, ref: videoInputRef, accept: 'video/*', capture: 'user' },
-      { label: 'Audio', icon: <MicrophoneIcon className="w-5 h-5"/>, ref: audioInputRef, accept: 'audio/*', capture: 'user' },
-      { label: 'File', icon: <PaperClipIcon className="w-5 h-5"/>, ref: fileInputRef, accept: '*', multiple: true },
-    ];
+    const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        if (!isAdding && 'status' in item) { 
+            onUpdate({ ...item, status: e.target.value as Status });
+        }
+    };
+
+    const handlePriorityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        if (!isAdding && 'priority' in item) { 
+            onUpdate({ ...item, priority: e.target.value as Priority });
+        }
+    };
 
     const renderViewMode = () => (
         <div className="p-6 space-y-6">
             <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-3 text-sm border-b border-gray-200 dark:border-gray-700 pb-4 items-center">
                 <MetadataItem icon={<ClockIcon className="w-4 h-4" />} label="Created time">
-                    {format(new Date(item.createdAt), 'MMM d, yyyy, h:mm a')}
+                    {format(new Date(item!.createdAt), 'MMM d, yyyy, h:mm a')}
                 </MetadataItem>
 
                 {isTask && (
                     <>
                         <MetadataItem icon={<SparklesIcon className="w-4 h-4" />} label="Status">
-                             <span className={`px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-200 dark:bg-gray-700`}>
-                                {(item as Task).status}
-                             </span>
+                             <select
+                                value={(item as Task).status}
+                                onChange={handleStatusChange}
+                                className="px-2 py-0.5 rounded-md text-xs font-semibold appearance-none bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-none focus:ring-2 focus:ring-primary cursor-pointer"
+                            >
+                                {statusOptions.map(s => (
+                                    <option key={s.status} value={s.status} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white">{s.name}</option>
+                                ))}
+                            </select>
                         </MetadataItem>
                         <MetadataItem icon={<FlagIcon className="w-4 h-4" />} label="Priority">
-                            <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${priorityColors[(item as Task).priority]}`}>
-                                {(item as Task).priority}
-                            </span>
+                           <select
+                                value={(item as Task).priority}
+                                onChange={handlePriorityChange}
+                                className={`px-2 py-0.5 rounded-md text-xs font-semibold appearance-none border-none focus:ring-2 focus:ring-primary cursor-pointer ${priorityColors[(item as Task).priority]}`}
+                            >
+                                {Object.values(Priority).map(p => (
+                                    <option key={p} value={p} className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white">{p}</option>
+                                ))}
+                            </select>
                         </MetadataItem>
                         <MetadataItem icon={<CalendarDaysIcon className="w-4 h-4" />} label="Due Date">
                             {format(new Date((item as Task).dueDate), 'MMMM d, yyyy')}
@@ -315,13 +400,42 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                     </>
                 )}
 
-                {item.tags && item.tags.length > 0 && (
+                {item!.tags && item!.tags.length > 0 && (
                      <MetadataItem icon={<TagIcon className="w-4 h-4" />} label="Tags">
-                        {item.tags.map(tag => (
+                        {item!.tags.map(tag => (
                             <span key={tag} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700/80 rounded-md text-xs">{tag}</span>
                         ))}
                     </MetadataItem>
                 )}
+                {/* Custom Fields Display */}
+                {isTask && applicableFields.map(field => {
+                    const value = (item as Task).customFields?.[field.id];
+                    if (value === undefined || value === null || value === '') return null;
+
+                    const getDisplayValue = () => {
+                        switch (field.type) {
+                            case 'select':
+                                const selectedOption = field.options?.find(opt => opt.id === value);
+                                return selectedOption ? selectedOption.value : String(value);
+                            case 'checkbox':
+                                return value ? 'Yes' : 'No';
+                            case 'date':
+                                try {
+                                    return format(new Date(value), 'MMMM d, yyyy');
+                                } catch {
+                                    return String(value); 
+                                }
+                            default:
+                                return String(value);
+                        }
+                    };
+
+                    return (
+                        <MetadataItem key={field.id} icon={<div className="w-4 h-4"></div>} label={field.name}>
+                            <span>{getDisplayValue()}</span>
+                        </MetadataItem>
+                    )
+                })}
             </div>
             
             {(isTask ? (item as Task).description : (item as Note).content) && (
@@ -345,11 +459,11 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                 </div>
             )}
 
-            {item.attachments && item.attachments.length > 0 && (
+            {item!.attachments && item!.attachments.length > 0 && (
                  <div>
                     <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Attachments</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {item.attachments.map(att => <AttachmentDisplay key={att.id} attachment={att} isPreview={true} />)}
+                        {item!.attachments.map(att => <AttachmentDisplay key={att.id} attachment={att} isPreview={true} />)}
                     </div>
                 </div>
             )}
@@ -438,7 +552,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{isTask ? "Description" : "Content"}</label>
                 {isTask ? (
-                    <textarea value={(editedItem as Task).description} onChange={e => handleFieldChange('description', e.target.value)} rows={5} className="w-full form-textarea rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary"/>
+                    <textarea value={(editedItem as Task).description} onChange={e => handleFieldChange('description', e.target.value)} rows={5} className="w-full form-textarea rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary"/>
                 ) : (
                     <RichTextEditor value={(editedItem as Note).content} onChange={value => handleFieldChange('content', value)} />
                 )}
@@ -449,20 +563,18 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                      {editedItem.attachments.map(att => <AttachmentDisplay key={att.id} attachment={att} isPreview={false} onRemove={removeAttachment} />)}
                 </div>
-                 <div className="flex items-center space-x-2">
-                    {attachmentButtons.map(btn => (
-                        <div key={btn.label}>
-                            <button type="button" onClick={() => btn.ref.current?.click()} className="p-2 text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors" title={btn.label}>
-                                {btn.icon}
-                            </button>
-                             <input
-                                  type="file" ref={btn.ref} accept={btn.accept}
-                                  capture={(btn.capture as any)} multiple={btn.multiple}
-                                  onChange={handleFileChange} className="hidden"
-                              />
-                        </div>
-                    ))}
-                 </div>
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg">
+                    <PaperClipIcon className="w-4 h-4" />
+                    Attach File
+                </button>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="*"
+                    multiple
+                    onChange={handleFileChange}
+                    className="hidden"
+                />
             </div>
 
             {isTask && (
@@ -498,7 +610,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             </div>
 
             {isTask && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                      <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
                       <input type="date" value={format(new Date((editedItem as Task).dueDate), 'yyyy-MM-dd')} onChange={e => handleFieldChange('dueDate', new Date(e.target.value).toISOString())} required className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>
@@ -523,8 +635,33 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
                      <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                       <select value={(editedItem as Task).status} onChange={e => handleFieldChange('status', e.target.value as Status)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
-                        {Object.values(Status).map(s => (<option key={s} value={s}>{s}</option>))}
+                        {statusOptions.map(s => (
+                            <option key={s.status} value={s.status}>{s.name}</option>
+                        ))}
                       </select>
+                    </div>
+                </div>
+            )}
+            {/* Custom Fields Edit */}
+            {isTask && applicableFields.length > 0 && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Custom Fields</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        {applicableFields.map(field => (
+                            <div key={field.id}>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.name}</label>
+                                {field.type === 'text' && <input type="text" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
+                                {field.type === 'number' && <input type="number" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
+                                {field.type === 'date' && <input type="date" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
+                                {field.type === 'checkbox' && <input type="checkbox" checked={!!(editedItem as Task).customFields?.[field.id]} onChange={e => handleCustomFieldChange(field.id, e.target.checked)} className="form-checkbox h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary" />}
+                                {field.type === 'select' && (
+                                    <select value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
+                                        <option value="">Select...</option>
+                                        {field.options?.map(opt => <option key={opt.id} value={opt.id}>{opt.value}</option>)}
+                                    </select>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
@@ -532,7 +669,7 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
     );
 
     const paneClasses = `
-      fixed z-40 bg-brand-light dark:bg-gray-900 flex flex-col transition-all duration-300 ease-in-out
+      fixed z-40 bg-card-light dark:bg-card-dark flex flex-col transition-all duration-300 ease-in-out
       ${isFullScreen
         ? 'inset-0 w-screen h-screen'
         : 'top-0 right-0 h-screen w-[480px] max-w-full shadow-2xl animate-slide-in-right'
@@ -543,28 +680,43 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
         <aside className={paneClasses}>
             <header className="flex-shrink-0 p-4 flex justify-between items-start border-b border-gray-200 dark:border-gray-700">
                  <div className="flex-grow pr-4">
-                     {isEditing ? (
-                         <input type="text" value={editedItem.title} onChange={e => handleFieldChange('title', e.target.value)} className="w-full text-lg font-semibold bg-transparent border-b border-dashed border-gray-400 dark:border-gray-500 focus:border-solid focus:border-primary focus:ring-0" />
+                     {(isEditing || isAdding) ? (
+                         <input type="text" value={editedItem.title} autoFocus={isAdding} onChange={e => handleFieldChange('title', e.target.value)} placeholder={isTask ? "New Task Title" : "New Note Title"} className="w-full text-lg font-semibold bg-transparent border-b border-dashed border-gray-400 dark:border-gray-500 focus:border-solid focus:border-primary focus:ring-0" />
                      ) : (
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{item.title}</h2>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{item!.title}</h2>
                      )}
                  </div>
                 <div className="flex items-center space-x-1">
-                    {isEditing ? (
+                    {(isEditing || isAdding) ? (
                         <>
-                            <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-200/80 dark:bg-gray-600/80 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                            {!isAdding && <button onClick={() => { setIsEditing(false); setEditedItem(item!); }} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-200/80 dark:bg-gray-600/80 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>}
                             <button
                                 onClick={handleSaveChanges}
                                 disabled={!editedItem.title.trim()}
                                 className="flex items-center space-x-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark disabled:bg-primary/70 dark:disabled:bg-primary/50 disabled:cursor-not-allowed transition-colors">
-                                <CheckIcon className="w-5 h-5"/>
-                                <span>Save</span>
+                                {isAdding ? (
+                                    <>
+                                        <PlusIcon className="w-5 h-5"/>
+                                        <span>Add</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckIcon className="w-5 h-5"/>
+                                        <span>Save</span>
+                                    </>
+                                )}
                             </button>
                         </>
                     ) : (
                         <>
+                            {isTask && (
+                                <button onClick={() => onStartFocus(item as Task)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold bg-primary/10 text-primary rounded-lg hover:bg-primary/20" aria-label="Start Focus Session">
+                                    <CrosshairIcon className="w-4 h-4" />
+                                    Focus
+                                </button>
+                            )}
                             <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Edit Item"><PencilIcon className="w-5 h-5" /></button>
-                            <button onClick={handleDelete} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Delete Item"><TrashIcon className="w-5 h-5" /></button>
+                            <button onClick={handleDeleteClick} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Delete Item"><TrashIcon className="w-5 h-5" /></button>
                         </>
                     )}
                     <button
@@ -580,10 +732,10 @@ const DetailPane = ({ item, onClose, onUpdate, onDelete, onAddComment }: DetailP
             </header>
 
             <div className="flex-grow overflow-y-auto pb-24">
-                {isEditing ? renderEditMode() : renderViewMode()}
+                {(isEditing || isAdding) ? renderEditMode() : renderViewMode()}
             </div>
             
-            {!isEditing && (
+            {!isAdding && !isEditing && (
               <div className="absolute bottom-6 right-6 z-10">
                   <button
                       onClick={handleAnalyze}

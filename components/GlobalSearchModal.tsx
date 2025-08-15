@@ -108,7 +108,7 @@ const GlobalSearchModal = ({ isOpen, onClose, tasks, notes, onSelectItem }: Glob
       onKeyDown={handleKeyDown}
     >
       <div
-        className="bg-brand-light dark:bg-sidebar-dark rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-fade-in"
+        className="bg-card-light dark:bg-card-dark rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-fade-in"
         onClick={e => e.stopPropagation()}
       >
         <div className="relative">

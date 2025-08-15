@@ -1,17 +1,19 @@
-import React from 'react';
+import * as React from 'react';
 import Sidebar from './Sidebar';
 import MainContentView from './MainContentView';
 import DetailPane from './DetailPane';
-import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, TaskFilter, ChatSession, Goal, Habit, HabitLog, Comment } from '../types';
+import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, TaskFilter, ChatSession, Goal, Habit, HabitLog, Comment, CustomFieldDefinition } from '../types';
 import StickyNotesView from './StickyNotesView';
 import AIChatView from './AIChatView';
 import DashboardView from './DashboardView';
 import MomentumView from './MomentumView';
 import SettingsView from './SettingsView';
 import GlobalSearchModal from './GlobalSearchModal';
-import AITaskParserModal from './AITaskParserModal';
+import AITaskParserView from './AITaskParserView';
 
 interface AppLayoutProps {
+  isSidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
   lists: List[];
   tasks: Task[];
   notes: Note[];
@@ -26,10 +28,13 @@ interface AppLayoutProps {
   onActiveSelectionChange: (selection: ActiveSelection) => void;
   detailItem: Task | Note | null;
   onDetailItemChange: (item: Task | Note | null) => void;
+  addingItemInfo: { type: 'task' | 'note', listId: string } | null;
+  onOpenAddItemPane: (listId: string, type: 'task' | 'note') => void;
+  onCloseDetailPane: () => void;
   onAddList: (list: Omit<List, 'id' | 'statuses'>) => void;
   onUpdateList: (list: List) => void;
   onDeleteList: (listId: string) => void;
-  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Task | Note;
+  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Promise<Task | Note>;
   onUpdateItem: (item: Task | Note) => void;
   onDeleteItem: (itemId: string, type: 'task' | 'note') => void;
   onAddComment: (taskId: string, content: string) => void;
@@ -50,14 +55,15 @@ interface AppLayoutProps {
   apiKey: string | null;
   onUpdateUser: (name: string) => void;
   onUpdateApiKey: (key: string) => void;
+  customFieldDefinitions: CustomFieldDefinition[];
+  setCustomFieldDefinitions: (definitions: CustomFieldDefinition[]) => void;
   isSearchOpen: boolean;
   setIsSearchOpen: (isOpen: boolean) => void;
-  isTaskParserOpen: boolean;
-  setIsTaskParserOpen: (isOpen: boolean) => void;
+  onStartFocus: (task: Task) => void;
 }
 
 const AppLayout = (props: AppLayoutProps) => {
-  const { detailItem, onDetailItemChange, activeSelection, userName, apiKey, onUpdateUser, onUpdateApiKey, isSearchOpen, setIsSearchOpen, isTaskParserOpen, setIsTaskParserOpen } = props;
+  const { detailItem, onDetailItemChange, addingItemInfo, onOpenAddItemPane, onCloseDetailPane, onAddItem, activeSelection, userName, apiKey, onUpdateUser, onUpdateApiKey, customFieldDefinitions, setCustomFieldDefinitions, isSearchOpen, setIsSearchOpen, onStartFocus, isSidebarCollapsed, onToggleSidebar } = props;
 
   const renderContent = () => {
     switch (activeSelection.type) {
@@ -104,12 +110,20 @@ const AppLayout = (props: AppLayoutProps) => {
             onDeleteHabit={props.onDeleteHabit}
             onToggleHabitLog={props.onToggleHabitLog}
           />;
+      case 'ai-task-parser':
+        return <AITaskParserView 
+            onAddItem={props.onAddItem}
+            lists={props.lists}
+        />;
       case 'settings':
         return <SettingsView 
             userName={userName}
             apiKey={apiKey}
             onUpdateUser={onUpdateUser}
             onUpdateApiKey={onUpdateApiKey}
+            customFieldDefinitions={customFieldDefinitions}
+            setCustomFieldDefinitions={setCustomFieldDefinitions}
+            lists={props.lists}
           />;
       default:
          return <MainContentView 
@@ -123,6 +137,9 @@ const AppLayout = (props: AppLayoutProps) => {
               onAddSavedFilter={props.onAddSavedFilter}
               onAddItem={props.onAddItem}
               onUpdateList={props.onUpdateList}
+              onStartFocus={onStartFocus}
+              onOpenAddItemPane={onOpenAddItemPane}
+              customFieldDefinitions={customFieldDefinitions}
           />;
     }
   };
@@ -132,9 +149,19 @@ const AppLayout = (props: AppLayoutProps) => {
     setIsSearchOpen(false);
   };
 
+  const isDetailPaneOpen = !!detailItem || !!addingItemInfo;
+
+  const currentListForDetailItem = React.useMemo(() => {
+    const listId = detailItem?.listId || addingItemInfo?.listId;
+    if (!listId) return undefined;
+    return props.lists.find(l => l.id === listId);
+  }, [detailItem, addingItemInfo, props.lists]);
+
   return (
     <div className="h-screen w-screen flex">
       <Sidebar 
+        isCollapsed={isSidebarCollapsed}
+        onToggle={onToggleSidebar}
         lists={props.lists}
         tasks={props.tasks}
         notes={props.notes}
@@ -147,18 +174,10 @@ const AppLayout = (props: AppLayoutProps) => {
         onDeleteSavedFilter={props.onDeleteSavedFilter}
         onDetailItemChange={props.onDetailItemChange}
         userName={userName}
-        onOpenTaskParser={() => setIsTaskParserOpen(true)}
       />
       <main className="flex-1 flex flex-col overflow-hidden bg-brand-light dark:bg-brand-dark">
         {renderContent()}
       </main>
-      
-      <AITaskParserModal
-        isOpen={isTaskParserOpen}
-        onClose={() => setIsTaskParserOpen(false)}
-        onAddItem={props.onAddItem}
-        lists={props.lists}
-      />
       
       {isSearchOpen && (
           <GlobalSearchModal
@@ -170,20 +189,26 @@ const AppLayout = (props: AppLayoutProps) => {
            />
       )}
 
-      {detailItem && (
+      {isDetailPaneOpen && (
         <>
           <div
-            onClick={() => onDetailItemChange(null)}
+            onClick={onCloseDetailPane}
             className="fixed inset-0 bg-black/20 z-30 animate-fade-in-overlay"
             aria-hidden="true"
           />
           <DetailPane
               item={detailItem}
-              onClose={() => onDetailItemChange(null)}
+              list={currentListForDetailItem}
+              itemTypeToAdd={addingItemInfo?.type}
+              listIdToAdd={addingItemInfo?.listId}
+              onClose={onCloseDetailPane}
               onUpdate={props.onUpdateItem}
+              onAddItem={onAddItem}
               onDelete={props.onDeleteItem}
               onAddComment={props.onAddComment}
-              key={detailItem.id}
+              onStartFocus={onStartFocus}
+              customFieldDefinitions={customFieldDefinitions}
+              key={detailItem?.id || 'add-pane'}
           />
         </>
       )}

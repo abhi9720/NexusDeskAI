@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Goal, List } from '../types';
-import { XMarkIcon, TrophyIcon } from './icons';
+import { XMarkIcon, CrosshairIcon } from './icons';
 import { format } from 'date-fns';
 
 interface AddGoalModalProps {
@@ -63,7 +63,7 @@ const AddGoalModal = ({ isOpen, onClose, onSave, goalToEdit, taskLists }: AddGoa
       <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl p-8 w-full max-w-lg m-4 transform transition-all animate-fade-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-            <TrophyIcon className="w-6 h-6 text-primary" />
+            <CrosshairIcon className="w-6 h-6 text-primary" />
             {goalToEdit ? 'Edit Goal' : 'Add New Goal'}
           </h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close">

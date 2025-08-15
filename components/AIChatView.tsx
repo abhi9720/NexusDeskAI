@@ -34,12 +34,27 @@ interface AIChatViewProps {
     onSendMessage: (message: string) => Promise<void>;
     onNewChat: () => void;
     onSelectChatSession: (sessionId: string) => void;
-    onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Task | Note;
+    onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => Promise<Task | Note>;
     onDetailItemChange: (item: Task | Note | null) => void;
     onActiveSelectionChange: (selection: ActiveSelection) => void;
     activeSelection: ActiveSelection;
 }
 
+const WelcomeScreen = ({ onExampleClick }: { onExampleClick: (prompt: string) => void }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4 animate-fade-in">
+      <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center mb-6 shadow-lg">
+        <SparklesIcon className="w-10 h-10 text-white" />
+      </div>
+      <h2 className="text-3xl font-bold text-gray-800 dark:text-white">How can I help you?</h2>
+      <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-md">I can create tasks and notes for you. Try saying or typing:</p>
+      <button 
+        onClick={() => onExampleClick("Create a task to design the new homepage by tomorrow")}
+        className="text-sm text-gray-700 dark:text-gray-200 mt-4 font-mono p-3 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+      >
+        "Create a task to design the new homepage by tomorrow"
+      </button>
+    </div>
+);
 
 const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelectChatSession, onAddItem, onDetailItemChange, onActiveSelectionChange, activeSelection }: AIChatViewProps) => {
     const [input, setInput] = useState('');
@@ -154,22 +169,6 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         setInput(prompt);
         // await handleSendMessage({ preventDefault: () => {} } as React.FormEvent);
     };
-    
-    const WelcomeScreen = () => (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4 animate-fade-in">
-        <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center mb-6 shadow-lg">
-          <SparklesIcon className="w-10 h-10 text-white" />
-        </div>
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-white">How can I help you?</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-md">I can create tasks and notes for you. Try saying or typing:</p>
-        <button 
-          onClick={() => handleExampleClick("Create a task to design the new homepage by tomorrow")}
-          className="text-sm text-gray-700 dark:text-gray-200 mt-4 font-mono p-3 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        >
-          "Create a task to design the new homepage by tomorrow"
-        </button>
-      </div>
-    );
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-brand-dark">
@@ -208,7 +207,7 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
                 </div>
             </header>
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                 {messages.length === 0 && !isLoading && <WelcomeScreen />}
+                 {messages.length === 0 && !isLoading && <WelcomeScreen onExampleClick={handleExampleClick} />}
                 {messages.map(msg => (
                     <div key={msg.id} className={`flex items-start gap-4 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                          {msg.role === 'model' && (

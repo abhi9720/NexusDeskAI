@@ -26,23 +26,24 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
         switch (step) {
             case 1:
                 return (
-                    <div className="text-center">
-                        <div className="w-24 h-24 mx-auto rounded-full bg-primary flex items-center justify-center mb-6 shadow-lg">
-                            <SparklesIcon className="w-12 h-12 text-white" />
+                    <div className="text-center animate-fade-in max-w-lg">
+                        <div className="w-28 h-28 mx-auto rounded-full bg-primary flex items-center justify-center mb-8 shadow-2xl shadow-primary/30">
+                            <SparklesIcon className="w-14 h-14 text-white" />
                         </div>
-                        <h1 className="text-4xl font-bold text-gray-800 dark:text-white">Welcome to TaskFlow AI</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-md mx-auto">
+                        <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight">Welcome to TaskFlow AI</h1>
+                        <p className="text-gray-600 dark:text-gray-400 mt-5 text-lg max-w-md mx-auto">
                             Your intelligent partner in productivity. Let's get you set up in just a moment.
                         </p>
                     </div>
                 );
             case 2:
                 return (
-                    <div className="w-full max-w-sm">
-                        <UserCircleIcon className="w-16 h-16 text-primary mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white">What should we call you?</h2>
-                        <div className="mt-6">
-                            <label htmlFor="userName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your Name</label>
+                    <div className="w-full max-w-md text-center animate-fade-in">
+                        <UserCircleIcon className="w-20 h-20 text-primary mx-auto mb-6" />
+                        <h2 className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">What should we call you?</h2>
+                        <p className="text-gray-600 dark:text-gray-400 mt-3 text-lg">This will be used to personalize your experience.</p>
+                        <div className="mt-8 text-left">
+                            <label htmlFor="userName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your Name</label>
                             <input
                                 type="text"
                                 id="userName"
@@ -50,7 +51,7 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                                 onChange={e => setUserName(e.target.value)}
                                 autoFocus
                                 onKeyDown={e => e.key === 'Enter' && handleNext()}
-                                className="w-full px-4 py-2 text-lg rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
+                                className="w-full px-4 py-3 text-lg rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:border-primary transition"
                                 placeholder="e.g., Courtney"
                             />
                         </div>
@@ -58,20 +59,21 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                 );
             case 3:
                 return (
-                    <div className="w-full max-w-sm">
-                        <KeyIcon className="w-16 h-16 text-primary mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white">Set up your AI Assistant</h2>
-                        <p className="text-sm text-center text-gray-500 dark:text-gray-400 mt-2">
+                    <div className="w-full max-w-md text-center animate-fade-in">
+                        <KeyIcon className="w-20 h-20 text-primary mx-auto mb-6" />
+                        <h2 className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">Set up your AI Assistant</h2>
+                        <p className="text-gray-600 dark:text-gray-400 mt-3 text-lg">
                            Provide your Gemini API key to enable AI features. This is optional and can be added later in settings.
                         </p>
-                        <div className="mt-6">
-                             <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gemini API Key</label>
+                        <div className="mt-8 text-left">
+                             <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gemini API Key</label>
                             <input
                                 type="password"
                                 id="apiKey"
                                 value={apiKey}
                                 onChange={e => setApiKey(e.target.value)}
-                                className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
+                                onKeyDown={e => e.key === 'Enter' && handleFinish()}
+                                className="w-full px-4 py-3 text-lg rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:border-primary transition"
                                 placeholder="Enter your key (optional)"
                             />
                         </div>
@@ -79,10 +81,10 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                 );
             case 4:
                 return (
-                     <div className="text-center">
-                        <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto mb-6" />
-                        <h1 className="text-4xl font-bold text-gray-800 dark:text-white">All Set, {userName}!</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-md mx-auto">
+                     <div className="text-center animate-fade-in">
+                        <CheckCircleIcon className="w-28 h-28 text-green-500 mx-auto mb-6" />
+                        <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight">All Set, {userName}!</h1>
+                        <p className="text-gray-600 dark:text-gray-400 mt-5 text-lg max-w-md mx-auto">
                            You're ready to start organizing your life with the power of AI.
                         </p>
                     </div>
@@ -91,23 +93,23 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-brand-light dark:bg-sidebar-dark z-50 flex flex-col justify-center items-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-sidebar-dark dark:to-brand-dark z-50 flex flex-col justify-center items-center p-4">
             <div className="flex-grow flex justify-center items-center w-full">
                 {renderStep()}
             </div>
             <div className="flex-shrink-0 p-6 flex justify-between items-center w-full max-w-lg">
                 <div className="flex items-center space-x-2">
                     {[1,2,3,4].map(i => (
-                        <div key={i} className={`w-2 h-2 rounded-full transition-colors ${step >= i ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                        <div key={i} className={`h-2 rounded-full transition-all duration-300 ${step >= i ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'} ${step === i ? 'w-6' : 'w-2'}`}></div>
                     ))}
                 </div>
                 {step < 4 ? (
-                     <button onClick={step === 3 ? handleFinish : handleNext} className="flex items-center space-x-2 px-6 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-lg">
+                     <button onClick={step === 3 ? handleFinish : handleNext} className="flex items-center space-x-2 px-8 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary-dark transition-all transform hover:scale-105 shadow-xl shadow-primary/20 hover:shadow-primary/30 focus:outline-none focus:ring-4 focus:ring-primary/50">
                         <span>{step === 3 ? 'Finish' : 'Continue'}</span>
                         <ChevronRightIcon className="w-5 h-5"/>
                     </button>
                 ) : (
-                    <button onClick={handleFinish} className="px-6 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition-all transform hover:scale-105 shadow-lg">
+                    <button onClick={handleFinish} className="px-8 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition-all transform hover:scale-105 shadow-xl shadow-green-500/20 hover:shadow-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500/50">
                         Start using the App
                     </button>
                 )}

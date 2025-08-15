@@ -1,6 +1,4 @@
-
-
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
 import { Note } from '../types';
 import NoteModal from './NoteModal';
 import { PlusIcon, TagIcon, PaperClipIcon } from './icons';
@@ -49,12 +47,12 @@ const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {
 };
 
 const NotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: NotesViewProps) => {
-  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [isNoteModalOpen, setIsNoteModalOpen] = React.useState(false);
+  const [selectedNote, setSelectedNote] = React.useState<Note | null>(null);
 
   // This effect synchronizes the selected note with the main list,
   // ensuring the modal always shows fresh data after an update.
-  useEffect(() => {
+  React.useEffect(() => {
     if (selectedNote) {
       const updatedNote = notes.find(n => n.id === selectedNote.id);
       if (updatedNote) {

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Task, Note, Priority, Attachment, ChecklistItem } from '../types';
+import { Task, Note, Priority, Attachment, ChecklistItem, CustomFieldDefinition } from '../types';
 import { XMarkIcon, DocumentTextIcon, PlusIcon, TrashIcon, TagIcon, PaperClipIcon, ListBulletIcon, FullScreenIcon, ExitFullScreenIcon, SparklesIcon } from './icons';
 import { format } from 'date-fns';
 import RichTextEditor from './RichTextEditor';
@@ -13,6 +13,7 @@ interface AddItemModalProps {
   onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => void;
   listId: string;
   listType: 'task' | 'note';
+  customFieldDefinitions: CustomFieldDefinition[];
 }
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: string) => void }) => {
@@ -40,7 +41,7 @@ const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, o
     );
 }
 
-const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemModalProps) => {
+const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType, customFieldDefinitions }: AddItemModalProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -52,6 +53,7 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
   const [tagInput, setTagInput] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isSuggestingPriority, setIsSuggestingPriority] = useState(false);
+  const [customFields, setCustomFields] = useState<{ [key: string]: any }>({});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,11 +69,26 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
           setTags([]);
           setTagInput('');
           setIsFullScreen(false);
+          setCustomFields({});
       }
   }, [isOpen]);
 
   if (!isOpen) return null;
   
+    const applicableFields = useMemo(() => {
+        if (listType !== 'task') return [];
+        return customFieldDefinitions.filter(
+            field => field.listId === null || field.listId === listId
+        );
+    }, [customFieldDefinitions, listId, listType]);
+
+    const handleCustomFieldChange = (fieldId: string, value: any) => {
+        setCustomFields(prev => ({
+            ...prev,
+            [fieldId]: value
+        }));
+    };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
@@ -175,6 +192,7 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
             dueDate: new Date(dueDate).toISOString(),
             priority,
             checklist: finalChecklist,
+            customFields,
         };
         onAddItem(newItem, listId, 'task');
     } else {
@@ -231,7 +249,7 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
                     <textarea
                       value={description}
                       onChange={e => setDescription(e.target.value)}
-                      rows={2}
+                      rows={4}
                       className="w-full p-0 bg-transparent border-0 focus:ring-0 resize-none text-sm text-gray-700 dark:text-gray-300"
                       placeholder="Add a description..."
                     />
@@ -310,30 +328,55 @@ const AddItemModal = ({ isOpen, onClose, onAddItem, listId, listType }: AddItemM
             </div>
           
            {listType === 'task' && (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                    <label htmlFor="dueDate" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Due Date</label>
-                    <input
-                        type="date" id="dueDate" value={dueDate} onChange={e => setDueDate(e.target.value)} required
-                        className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary"
-                    />
-                </div>
-                <div>
-                    <div className="flex items-center justify-between mb-1">
-                        <label htmlFor="priority" className="block text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
-                        <button type="button" onClick={handleSuggestPriority} disabled={isSuggestingPriority} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
-                            <SparklesIcon className="w-3 h-3"/>
-                            {isSuggestingPriority ? 'Thinking...' : 'Suggest'}
-                        </button>
+             <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="dueDate" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Due Date</label>
+                        <input
+                            type="date" id="dueDate" value={dueDate} onChange={e => setDueDate(e.target.value)} required
+                            className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary"
+                        />
                     </div>
-                    <select
-                        id="priority" value={priority} onChange={e => setPriority(e.target.value as Priority)}
-                        className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary"
-                    >
-                        {Object.values(Priority).map(p => (<option key={p} value={p}>{p}</option>))}
-                    </select>
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label htmlFor="priority" className="block text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
+                            <button type="button" onClick={handleSuggestPriority} disabled={isSuggestingPriority} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
+                                <SparklesIcon className="w-3 h-3"/>
+                                {isSuggestingPriority ? 'Thinking...' : 'Suggest'}
+                            </button>
+                        </div>
+                        <select
+                            id="priority" value={priority} onChange={e => setPriority(e.target.value as Priority)}
+                            className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary"
+                        >
+                            {Object.values(Priority).map(p => (<option key={p} value={p}>{p}</option>))}
+                        </select>
+                    </div>
                 </div>
-            </div>
+
+                {applicableFields.length > 0 && (
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700/80">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Custom Fields</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {applicableFields.map(field => (
+                                <div key={field.id}>
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{field.name}</label>
+                                    {field.type === 'text' && <input type="text" value={customFields[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary" />}
+                                    {field.type === 'number' && <input type="number" value={customFields[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary" />}
+                                    {field.type === 'date' && <input type="date" value={customFields[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary" />}
+                                    {field.type === 'checkbox' && <input type="checkbox" checked={!!customFields[field.id]} onChange={e => handleCustomFieldChange(field.id, e.target.checked)} className="form-checkbox h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary" />}
+                                    {field.type === 'select' && (
+                                        <select value={customFields[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full text-sm px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary focus:border-primary">
+                                            <option value="">Select...</option>
+                                            {field.options?.map(opt => <option key={opt.id} value={opt.id}>{opt.value}</option>)}
+                                        </select>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </>
           )}
         </form>
          <div className="flex justify-end pt-4 mt-auto flex-shrink-0 border-t border-gray-200 dark:border-gray-700/80">

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Task, Status, Priority, List, ListStatusMapping } from '../types';
-import { ClockIcon, PaperClipIcon, ListBulletIcon, EllipsisHorizontalIcon, PlusIcon, TrashIcon, ChatBubbleLeftEllipsisIcon } from './icons';
+import { ClockIcon, PaperClipIcon, ListBulletIcon, EllipsisHorizontalIcon, PlusIcon, TrashIcon, ChatBubbleLeftEllipsisIcon, CrosshairIcon } from './icons';
 
 interface TaskBoardViewProps {
     tasks: Task[];
@@ -8,6 +8,7 @@ interface TaskBoardViewProps {
     onSelectTask: (task: Task) => void;
     onUpdateTask: (task: Task) => void;
     onUpdateList?: (list: List) => void;
+    onStartFocus: (task: Task) => void;
 }
 
 const statusConfig: Record<Status, { color: string }> = {
@@ -25,7 +26,7 @@ const priorityColors: Record<Priority, { dot: string, text: string }> = {
     [Priority.Low]: { dot: 'bg-green-500', text: 'text-green-500' },
 };
 
-const TaskCard = ({ task, onClick, onDragStart }: { task: Task; onClick: () => void; onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void; }) => {
+const TaskCard = ({ task, onClick, onDragStart, onStartFocus }: { task: Task; onClick: () => void; onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void; onStartFocus: (task: Task) => void; }) => {
     const dueDate = new Date(task.dueDate);
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -36,10 +37,19 @@ const TaskCard = ({ task, onClick, onDragStart }: { task: Task; onClick: () => v
             draggable
             onDragStart={(e) => onDragStart(e, task.id)}
             onClick={onClick}
-            className="p-4 mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all"
+            className="p-4 mb-4 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all group relative"
             role="button"
             aria-label={`View task: ${task.title}`}
         >
+            <div className="absolute top-2 right-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={(e) => { e.stopPropagation(); onStartFocus(task); }}
+                    className="p-1 rounded-full bg-white/50 dark:bg-black/20 hover:bg-white dark:hover:bg-black/40 text-gray-600 dark:text-gray-300"
+                    title="Focus on this task"
+                >
+                    <CrosshairIcon className="w-4 h-4" />
+                </button>
+            </div>
             <h4 className="font-semibold text-gray-800 dark:text-white mb-2">{task.title}</h4>
             <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                 <span className={`flex items-center space-x-1.5 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
@@ -86,9 +96,10 @@ interface TaskColumnProps {
     onDrop: (e: React.DragEvent<HTMLDivElement>, status: Status) => void;
     onUpdateList?: (list: List) => void;
     onUpdateColumnName: (status: Status, newName: string) => void;
+    onStartFocus: (task: Task) => void;
 }
 
-const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, onUpdateList, onUpdateColumnName }: TaskColumnProps) => {
+const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, onUpdateList, onUpdateColumnName, onStartFocus }: TaskColumnProps) => {
     const [isOver, setIsOver] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
@@ -189,7 +200,7 @@ const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, on
             </div>
             <div className="space-y-4 h-[calc(100%-40px)] overflow-y-auto pr-1 -mr-2">
                 {tasks.map(task => (
-                    <TaskCard key={task.id} task={task} onClick={() => onCardClick(task)} onDragStart={onDragStart} />
+                    <TaskCard key={task.id} task={task} onClick={() => onCardClick(task)} onDragStart={onDragStart} onStartFocus={onStartFocus} />
                 ))}
             </div>
         </div>
@@ -245,7 +256,7 @@ const AddColumn = ({ list, onUpdateList }: { list: List; onUpdateList: (list: Li
     );
 }
 
-const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList }: TaskBoardViewProps) => {
+const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList, onStartFocus }: TaskBoardViewProps) => {
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
         e.dataTransfer.setData('taskId', taskId);
@@ -303,6 +314,7 @@ const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList }
                     onDrop={handleDrop}
                     onUpdateList={onUpdateList}
                     onUpdateColumnName={handleUpdateColumnName}
+                    onStartFocus={onStartFocus}
                 />
             ))}
             {list && onUpdateList && (

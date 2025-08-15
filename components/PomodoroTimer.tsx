@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
 import { ClockIcon } from './icons';
 
 const PomodoroTimer = () => {
-    const [duration, setDuration] = useState(25 * 60); // Default 25 minutes
-    const [time, setTime] = useState(duration);
-    const [isActive, setIsActive] = useState(false);
-    const [customMinutes, setCustomMinutes] = useState('25');
+    const [duration, setDuration] = React.useState(25 * 60); // Default 25 minutes
+    const [time, setTime] = React.useState(duration);
+    const [isActive, setIsActive] = React.useState(false);
+    const [customMinutes, setCustomMinutes] = React.useState('25');
 
     const quickPicks = [
         { label: '15 min', value: 15 },
@@ -14,7 +14,7 @@ const PomodoroTimer = () => {
     ];
 
     // Update time when duration changes, but only if timer isn't running
-    useEffect(() => {
+    React.useEffect(() => {
         if (!isActive) {
             setTime(duration);
             setCustomMinutes(String(duration / 60));
@@ -39,7 +39,7 @@ const PomodoroTimer = () => {
         }
     };
     
-    useEffect(() => {
+    React.useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
         if (isActive && time > 0) {
             interval = setInterval(() => {
@@ -55,7 +55,7 @@ const PomodoroTimer = () => {
         };
     }, [isActive, time]);
     
-    useEffect(() => {
+    React.useEffect(() => {
         if (Notification.permission === 'default') {
             Notification.requestPermission();
         }
@@ -80,7 +80,7 @@ const PomodoroTimer = () => {
     };
 
     return (
-        <div className="p-6 rounded-2xl bg-white/50 dark:bg-black/20 backdrop-blur-sm border border-white/20 dark:border-black/20 shadow-lg animate-fade-in">
+        <div className="p-6 rounded-2xl bg-card-light/50 dark:bg-card-dark/20 backdrop-blur-sm border border-white/20 dark:border-black/20 shadow-lg animate-fade-in">
             <div className="flex items-center space-x-3">
                 <ClockIcon className="w-6 h-6 text-primary" />
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Pomodoro Timer</h3>

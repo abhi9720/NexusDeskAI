@@ -1,11 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { List, Task, Note, ActiveSelection, SavedFilter, TaskFilter, Priority, Status } from '../types';
+import { List, Task, Note, ActiveSelection, SavedFilter, TaskFilter, Priority, Status, CustomFieldDefinition } from '../types';
 import TaskListView from './TaskListView';
 import TaskBoardView from './TaskBoardView';
 import NoteListView from './NoteListView';
 import TaskFilterBar from './TaskFilterBar';
 import SaveFilterModal from './SaveFilterModal';
-import AddItemModal from './AddItemModal';
 import ProjectOverview from './ProjectOverview';
 import TaskCalendarView from './TaskCalendarView';
 import { QueueListIcon, ViewColumnsIcon, PlusIcon, DashboardIcon, FilterIcon, GroupByIcon, SortIcon, CalendarDaysIcon, CheckIcon } from './icons';
@@ -33,19 +32,21 @@ interface MainContentViewProps {
   onSelectItem: (item: Task | Note) => void;
   onUpdateItem: (item: Task | Note) => void;
   onAddSavedFilter: (name: string, filter: TaskFilter) => void;
-  onAddItem: (item: Omit<Task, 'id'|'createdAt'|'status'> | Omit<Note, 'id'|'createdAt'|'updatedAt'>, listId: string, type: 'task' | 'note') => void;
+  onAddItem: (item: Partial<Task & Note>, listId: string, type: 'task' | 'note') => void;
   onUpdateList: (list: List) => void;
+  onStartFocus: (task: Task) => void;
+  onOpenAddItemPane: (listId: string, type: 'task' | 'note') => void;
+  customFieldDefinitions: CustomFieldDefinition[];
 }
 
 const MainContentView = (props: MainContentViewProps) => {
-  const { activeSelection, lists, tasks, notes, savedFilters, onSelectItem, onUpdateItem, onAddSavedFilter, onAddItem, onUpdateList } = props;
+  const { activeSelection, lists, tasks, notes, savedFilters, onSelectItem, onUpdateItem, onAddSavedFilter, onAddItem, onUpdateList, onStartFocus, onOpenAddItemPane, customFieldDefinitions } = props;
   const [viewType, setViewType] = useState<'overview' | 'board' | 'list' | 'calendar'>('board');
   const [taskFilter, setTaskFilter] = useState<TaskFilter>({ keyword: '', status: 'all', priority: 'all' });
   const [isSaveFilterModalOpen, setIsSaveFilterModalOpen] = useState(false);
-  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [sortType, setSortType] = useState<'default' | 'priority' | 'dueDate'>('default');
-  const [groupBy, setGroupBy] = useState<'default' | 'priority' | 'status'>('default');
+  const [groupBy, setGroupBy] = useState<'default' | 'priority' | 'status' | 'tag'>('default');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -243,15 +244,15 @@ const MainContentView = (props: MainContentViewProps) => {
         
         switch (viewType) {
             case 'overview':
-                return <ProjectOverview tasks={sortedTasks} />;
+                return <ProjectOverview tasks={sortedTasks} list={currentList} />;
             case 'board':
-                return <TaskBoardView tasks={sortedTasks} list={currentList} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} onUpdateList={onUpdateList} />;
+                return <TaskBoardView tasks={sortedTasks} list={currentList} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} onUpdateList={onUpdateList} onStartFocus={onStartFocus} />;
             case 'list':
-                return <TaskListView tasks={sortedTasks} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} groupBy={groupBy} />;
+                return <TaskListView tasks={sortedTasks} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} groupBy={groupBy} onStartFocus={onStartFocus} />;
             case 'calendar':
                 return <TaskCalendarView tasks={sortedTasks} onSelectTask={onSelectItem} />;
             default:
-                return <TaskBoardView tasks={sortedTasks} list={currentList} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} onUpdateList={onUpdateList} />;
+                return <TaskBoardView tasks={sortedTasks} list={currentList} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} onUpdateList={onUpdateList} onStartFocus={onStartFocus} />;
         }
     };
 
@@ -297,6 +298,7 @@ const MainContentView = (props: MainContentViewProps) => {
                                             <DropdownMenuItem label="Default" current={groupBy} value="default" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
                                             <DropdownMenuItem label="By Priority" current={groupBy} value="priority" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
                                             <DropdownMenuItem label="By Status" current={groupBy} value="status" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
+                                            <DropdownMenuItem label="By Tag" current={groupBy} value="tag" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
                                         </div>
                                     )}
                                 </div>
@@ -320,11 +322,11 @@ const MainContentView = (props: MainContentViewProps) => {
                     )}
                     {currentList && (
                         <button
-                            onClick={() => setIsAddItemModalOpen(true)}
+                            onClick={() => onOpenAddItemPane(currentList.id, currentList.type)}
                             className="flex items-center space-x-2 ml-2 px-3 py-1.5 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-sm text-sm"
                         >
                             <PlusIcon className="w-4 h-4" />
-                            <span>Add Task</span>
+                            <span>Add {currentList.type === 'task' ? 'Task' : 'Note'}</span>
                         </button>
                     )}
                 </div>
@@ -343,7 +345,7 @@ const MainContentView = (props: MainContentViewProps) => {
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">{title}</h2>
             {currentList && (
                 <button
-                    onClick={() => setIsAddItemModalOpen(true)}
+                    onClick={() => onOpenAddItemPane(currentList.id, currentList.type)}
                     className="flex items-center space-x-2 px-3 py-1.5 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-sm text-sm"
                 >
                     <PlusIcon className="w-4 h-4" />
@@ -362,15 +364,6 @@ const MainContentView = (props: MainContentViewProps) => {
         onClose={() => setIsSaveFilterModalOpen(false)}
         onSave={handleSaveFilter}
       />
-      {isAddItemModalOpen && currentList && (
-          <AddItemModal
-            isOpen={isAddItemModalOpen}
-            onClose={() => setIsAddItemModalOpen(false)}
-            onAddItem={onAddItem}
-            listId={currentList.id}
-            listType={currentList.type}
-          />
-      )}
     </div>
   );
 };

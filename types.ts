@@ -1,6 +1,39 @@
-// --- New Types for Organization ---
-export type Theme = 'light' | 'dark' | 'system';
+// --- New Theme & Personalization Types ---
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export interface CustomTheme {
+  id: string;
+  name: string;
+  colors: {
+    primary: string;      // Accent
+    brandLight: string;   // Page background (Light)
+    sidebarLight: string; // Sidebar background (Light)
+    cardLight: string;    // Card background (Light)
+    brandDark: string;    // Page background (Dark)
+    sidebarDark: string;  // Sidebar background (Dark)
+    cardDark: string;     // Card background (Dark)
+  };
+}
+
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'checkbox';
+
+export interface CustomFieldOption {
+  id: string;
+  value: string;
+  color?: string;
+}
+
+export interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  type: CustomFieldType;
+  options?: CustomFieldOption[]; // for 'select' type
+  listId: string | null; // null for global, or a specific task list ID
+}
+
+
+// --- New Types for Organization ---
 export interface ListStatusMapping {
   status: Status;
   name: string;
@@ -73,7 +106,8 @@ export type ActiveSelection =
   | { type: 'calendar' }
   | { type: 'ai-chat' }
   | { type: 'momentum' }
-  | { type: 'settings' };
+  | { type: 'settings' }
+  | { type: 'ai-task-parser' };
 
 // --- Core Data Models (Updated) ---
 export enum Priority {
@@ -112,6 +146,21 @@ export interface Comment {
   avatarUrl?: string;
 }
 
+export type ActivityType = 'created' | 'status' | 'priority' | 'comment';
+
+export interface ActivityLog {
+  id: string;
+  type: ActivityType;
+  content: {
+      from?: string; // e.g., 'To Do'
+      to?: string; // e.g., 'In Progress'
+      commentContent?: string;
+  };
+  taskTitle: string;
+  createdAt: string;
+  userName: string;
+}
+
 export interface Task {
   id:string;
   listId: string;
@@ -125,6 +174,8 @@ export interface Task {
   attachments: Attachment[];
   checklist: ChecklistItem[];
   comments: Comment[];
+  activityLog: ActivityLog[];
+  customFields: { [fieldId: string]: any }; // For string, number, date string, optionId, or boolean
 }
 
 export interface Note {

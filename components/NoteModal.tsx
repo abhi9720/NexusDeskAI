@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Note, NoteAnalysis, Attachment } from '../types';
-import { XMarkIcon, SparklesIcon, TrashIcon, TagIcon, CameraIcon, VideoIcon, MicrophoneIcon, PaperClipIcon } from './icons';
+import { XMarkIcon, SparklesIcon, TrashIcon, TagIcon, PaperClipIcon } from './icons';
 import { summarizeAndTagNote } from '../services/geminiService';
 import RichTextEditor from './RichTextEditor';
 import { fileService } from '../services/storageService';
@@ -43,23 +43,20 @@ const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: At
 }
 
 const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteModalProps) => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [tagInput, setTagInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
+  const [title, setTitle] = React.useState('');
+  const [content, setContent] = React.useState('');
+  const [tags, setTags] = React.useState<string[]>([]);
+  const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  const [tagInput, setTagInput] = React.useState('');
+  const [activeTab, setActiveTab] = React.useState<'write' | 'preview'>('write');
   
-  const [analysis, setAnalysis] = useState<NoteAnalysis | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = React.useState<NoteAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isOpen) {
         if (note) {
             setTitle(note.title);
@@ -169,20 +166,6 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
     }
   };
 
-  const actionButtons: {
-    label: string;
-    icon: JSX.Element;
-    ref: React.RefObject<HTMLInputElement>;
-    accept: string;
-    capture?: 'user' | 'environment';
-    multiple?: boolean;
-  }[] = [
-      { label: 'Click photo', icon: <CameraIcon className="w-5 h-5"/>, ref: photoInputRef, accept: 'image/*', capture: 'environment' },
-      { label: 'Attach files', icon: <PaperClipIcon className="w-5 h-5"/>, ref: fileInputRef, accept: '*', multiple: true },
-      { label: 'Record video', icon: <VideoIcon className="w-5 h-5"/>, ref: videoInputRef, accept: 'video/*' },
-      { label: 'Record Audio', icon: <MicrophoneIcon className="w-5 h-5"/>, ref: audioInputRef, accept: 'audio/*' },
-  ];
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-start backdrop-blur-sm pt-10" onClick={onClose} role="dialog" aria-modal="true">
       <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl w-full max-w-3xl m-4 max-h-[90vh] flex flex-col transform transition-all animate-fade-in" onClick={e => e.stopPropagation()}>
@@ -220,33 +203,23 @@ const NoteModal = ({ isOpen, onClose, onAdd, onUpdate, onDelete, note }: NoteMod
                     {activeTab === 'write' ? (
                         <div className="space-y-4">
                            <RichTextEditor value={content} onChange={setContent} placeholder="Write your note here..." />
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Content</label>
-                                <div className="grid grid-cols-2 gap-4">
-                                  {actionButtons.map(btn => (
-                                      <div key={btn.label}>
-                                          <button type="button" onClick={() => btn.ref.current?.click()} className="w-full flex flex-col items-center justify-center p-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 transition-colors">
-                                              {btn.icon}
-                                              <span className="mt-1">{btn.label}</span>
-                                          </button>
-                                          <input
-                                            type="file"
-                                            ref={btn.ref}
-                                            accept={btn.accept}
-                                            capture={btn.capture}
-                                            multiple={btn.multiple}
-                                            onChange={handleFileChange}
-                                            className="hidden"
-                                          />
-                                      </div>
-                                  ))}
-                                </div>
-                            </div>
-                            <div>
+                           <div>
                                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg p-2 bg-gray-100 dark:bg-gray-900/50">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg p-2 bg-gray-100 dark:bg-gray-900/50 mb-2">
                                     {attachments.map(att => <AttachmentDisplay key={att.id} attachment={att} onRemove={removeAttachment} isPreview={false} />)}
                                 </div>
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg">
+                                    <PaperClipIcon className="w-4 h-4" />
+                                    Attach File
+                                </button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    accept="*"
+                                    multiple
+                                    onChange={handleFileChange}
+                                    className="hidden"
+                                />
                             </div>
                             
                             <div>

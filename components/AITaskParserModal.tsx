@@ -4,10 +4,10 @@ import { XMarkIcon, SparklesIcon, ListBulletIcon, CheckIcon } from './icons';
 import { parseTasksFromText } from '../services/geminiService';
 
 interface AITaskParserModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onAddItem: (item: Partial<Task>, listId: string, type: 'task') => void;
-    lists: List[];
+  isOpen: boolean;
+  onClose: () => void;
+  onAddItem: (item: Partial<Task>, listId: string, type: 'task') => void;
+  lists: List[];
 }
 
 type ParsedTask = {
@@ -54,7 +54,7 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
         setError(null);
         setParsedTasks([]);
         setSelectedTasks(new Set());
-
+        
         const result = await parseTasksFromText(inputText);
         if (result) {
             setParsedTasks(result);
@@ -116,18 +116,18 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
                             placeholder="e.g., Remind John to send the deck. Schedule a follow-up for next Tuesday..."
                             className="w-full flex-grow p-3 text-sm rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary resize-none"
                         />
-                        <button onClick={handleParse} disabled={isLoading || !inputText.trim()} className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors disabled:bg-primary/70 disabled:cursor-not-allowed">
-                            {isLoading ? (
+                         <button onClick={handleParse} disabled={isLoading || !inputText.trim()} className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors disabled:bg-primary/70 disabled:cursor-not-allowed">
+                             {isLoading ? (
                                 <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Parsing...</span>
+                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                 <span>Parsing...</span>
                                 </>
-                            ) : (
+                             ) : (
                                 <>
-                                    <SparklesIcon className="w-5 h-5" />
-                                    <span>Parse with AI</span>
+                                 <SparklesIcon className="w-5 h-5" />
+                                 <span>Parse with AI</span>
                                 </>
-                            )}
+                             )}
                         </button>
                     </div>
 
@@ -142,8 +142,8 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
                                 <div className="flex items-center justify-center h-full text-red-500 p-4">{error}</div>
                             )}
                             {!isLoading && !error && parsedTasks.length === 0 && (
-                                <div className="flex items-center justify-center h-full text-gray-500 text-center p-4">
-                                    <p>Your parsed tasks will appear here.</p>
+                                 <div className="flex items-center justify-center h-full text-gray-500 text-center p-4">
+                                     <p>Your parsed tasks will appear here.</p>
                                 </div>
                             )}
                             <div className="space-y-2 p-2">
@@ -162,13 +162,13 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
                         </div>
                     </div>
                 </main>
-
+                
                 <footer className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end items-center gap-4 flex-shrink-0">
                     <div className="flex items-center gap-2">
-                        <label htmlFor="list-select" className="text-sm font-medium">Add to list:</label>
-                        <select id="list-select" value={targetListId} onChange={e => setTargetListId(e.target.value)} className="form-select text-sm rounded-lg bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
+                         <label htmlFor="list-select" className="text-sm font-medium">Add to list:</label>
+                         <select id="list-select" value={targetListId} onChange={e => setTargetListId(e.target.value)} className="form-select text-sm rounded-lg bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary">
                             {taskLists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}
-                        </select>
+                         </select>
                     </div>
                     <button onClick={handleAddTasks} disabled={selectedTasks.size === 0} className="px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors disabled:bg-primary/70 disabled:cursor-not-allowed">
                         Add {selectedTasks.size} Task(s)

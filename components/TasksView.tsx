@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import * as React from 'react';
 import { Task, Status, Priority, TaskFilter } from '../types';
 import AddTaskModal from './AddTaskModal';
 import TaskModal from './TaskModal';
@@ -6,7 +6,7 @@ import { PlusIcon, ClockIcon, PaperClipIcon, ListBulletIcon, XMarkIcon, ViewColu
 
 interface TasksViewProps {
   tasks: Task[];
-  onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'status'>) => void;
+  onAddTask: (task: Partial<Task>) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   taskFilter: TaskFilter;
@@ -84,7 +84,7 @@ interface TaskColumnProps {
 }
 
 const TaskColumn = ({ status, tasks, onCardClick, onDragStart, onDrop }: TaskColumnProps) => {
-    const [isOver, setIsOver] = useState(false);
+    const [isOver, setIsOver] = React.useState(false);
     return (
         <div
             onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
@@ -159,11 +159,11 @@ const TaskListGroup = ({ title, tasks, onUpdate, onSelect }: { title: string, ta
 
 
 const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, setTaskFilter }: TasksViewProps) => {
-  const [view, setView] = useState<'board' | 'list'>('board');
-  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [view, setView] = React.useState<'board' | 'list'>('board');
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = React.useState(false);
+  const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (selectedTask) {
         const updatedTask = tasks.find(t => t.id === selectedTask.id);
         if (updatedTask) {
@@ -186,7 +186,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
     }
   };
 
-  const filteredTasks = useMemo(() => {
+  const filteredTasks = React.useMemo(() => {
     return tasks.filter(task => {
         const keywordMatch = taskFilter.keyword
             ? task.title.toLowerCase().includes(taskFilter.keyword.toLowerCase()) || 
@@ -205,7 +205,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
       });
   }, [tasks, taskFilter]);
 
-  const tasksByStatus = useMemo(() => {
+  const tasksByStatus = React.useMemo(() => {
     const sortedTasks = [...filteredTasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return sortedTasks.reduce((acc, task) => {
       acc[task.status] = acc[task.status] || [];
@@ -214,7 +214,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
     }, {} as Record<Status, Task[]>);
   }, [filteredTasks]);
 
-  const groupedTasksForList = useMemo(() => {
+  const groupedTasksForList = React.useMemo(() => {
     const groups = { overdue: [] as Task[], today: [] as Task[], tomorrow: [] as Task[], upcoming: [] as Task[], completed: [] as Task[] };
     const today = new Date(); today.setHours(0,0,0,0);
     const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
@@ -329,7 +329,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
         <AddTaskModal
             isOpen={isAddTaskModalOpen}
             onClose={() => setIsAddTaskModalOpen(false)}
-            onAddTask={onAddTask}
+            onAddTask={(task) => onAddTask(task)}
         />
         <TaskModal
             task={selectedTask}

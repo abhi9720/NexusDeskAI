@@ -13,9 +13,12 @@
   },
   "dependencies": {
     "@google/genai": "^1.13.0",
+    "better-sqlite3": "^12.2.0",
     "date-fns": "^3.6.0",
     "electron-store": "^10.1.0",
+    "idb": "^8.0.3",
     "marked": "^13.0.2",
+    "mime": "^4.0.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "uuid": "^10.0.0"

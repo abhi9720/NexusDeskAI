@@ -1,9 +1,10 @@
-import React from 'react';
+import * as React from 'react';
 import { Task, List, Note, Status, Priority } from '../types';
 import PomodoroTimer from './PomodoroTimer';
 import { SparklesIcon, CheckCircleIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon } from './icons';
 import { isToday } from 'date-fns';
 import CalendarWidget from './CalendarWidget';
+import DeadlineMonitor from './DeadlineMonitor';
 
 interface DashboardViewProps {
     tasks: Task[];
@@ -48,7 +49,7 @@ const TasksDueToday = ({ tasks, onTaskClick }: { tasks: Task[], onTaskClick: (ta
     const otherTasks = tasks.filter(t => t.priority !== Priority.High);
 
     return (
-        <div className="bg-white dark:bg-sidebar-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
+        <div className="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
             <h3 className="font-semibold text-lg text-gray-800 dark:text-white mb-4">Focus for Today</h3>
             {tasks.length === 0 ? (
                 <p className="text-sm text-center py-8 text-gray-500 dark:text-gray-400">No tasks due today. Enjoy your day!</p>
@@ -96,7 +97,7 @@ const TasksDueToday = ({ tasks, onTaskClick }: { tasks: Task[], onTaskClick: (ta
 };
 
 const ProjectProgress = ({ lists, tasks, onProjectClick }: { lists: List[], tasks: Task[], onProjectClick: (listId: string) => void }) => (
-    <div className="bg-white dark:bg-sidebar-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
+    <div className="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
         <h3 className="font-semibold text-lg text-gray-800 dark:text-white mb-4">Project Progress</h3>
         <div className="space-y-4">
             {lists.filter(l => l.type === 'task').slice(0, 4).map(list => {
@@ -121,7 +122,7 @@ const ProjectProgress = ({ lists, tasks, onProjectClick }: { lists: List[], task
 );
 
 const RecentNotes = ({ notes, onNoteClick }: { notes: Note[], onNoteClick: (note: Note) => void }) => (
-    <div className="bg-white dark:bg-sidebar-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
+    <div className="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700/50">
         <h3 className="font-semibold text-lg text-gray-800 dark:text-white mb-4">Recent Notes</h3>
         <div className="space-y-3">
             {notes.slice(0, 3).map(note => (
@@ -150,7 +151,7 @@ const DashboardView = ({ tasks, lists, notes, onSelectItem, onActiveSelectionCha
     };
 
     return (
-        <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-brand-light dark:bg-brand-dark">
+        <div className="p-6 md:p-8 flex-1 overflow-y-auto">
             <header className="mb-8">
                 <WelcomeHeader onAskAI={handleAskAI} />
             </header>
@@ -159,6 +160,7 @@ const DashboardView = ({ tasks, lists, notes, onSelectItem, onActiveSelectionCha
                 {/* Main Column */}
                 <div className="xl:col-span-3 space-y-6">
                     <TasksDueToday tasks={tasksDueToday} onTaskClick={onSelectItem} />
+                    <DeadlineMonitor tasks={tasks} onSelectItem={onSelectItem} />
                     <ProjectProgress lists={lists} tasks={tasks} onProjectClick={handleProjectClick} />
                     <RecentNotes notes={recentNotes} onNoteClick={onSelectItem} />
                 </div>
