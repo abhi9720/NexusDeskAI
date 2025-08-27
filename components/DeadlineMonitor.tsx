@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { Task, Status } from '../types';
 import { ExclamationTriangleIcon } from './icons';
-import { formatDistanceToNow, isPast, isToday, startOfDay, addDays, isWithinInterval, differenceInDays } from 'date-fns';
+import { formatDistanceToNow, isPast, isToday, addDays, isWithinInterval, differenceInDays } from 'date-fns';
+import startOfDay from 'date-fns/startOfDay';
 
 interface DeadlineMonitorProps {
     tasks: Task[];
@@ -20,18 +21,16 @@ const DeadlineMonitor = ({ tasks, onSelectItem }: DeadlineMonitorProps) => {
         tasks.forEach(task => {
             if (task.status === Status.Done) return;
             
-            try {
-                const dueDate = new Date(task.dueDate);
-                if (isPast(dueDate) && !isToday(dueDate)) {
-                    overdue.push(task);
-                } else if (
-                    isWithinInterval(dueDate, { start: today, end: riskDateLimit }) &&
-                    (task.status === Status.ToDo || task.status === Status.Backlog)
-                ) {
-                    atRisk.push(task);
-                }
-            } catch (e) {
-                // Invalid date, ignore.
+            const dueDate = new Date(task.dueDate);
+            if (isNaN(dueDate.getTime())) return; // Skip if date is invalid
+
+            if (isPast(dueDate) && !isToday(dueDate)) {
+                overdue.push(task);
+            } else if (
+                isWithinInterval(dueDate, { start: today, end: riskDateLimit }) &&
+                (task.status === Status.ToDo || task.status === Status.Backlog)
+            ) {
+                atRisk.push(task);
             }
         });
 
@@ -42,8 +41,10 @@ const DeadlineMonitor = ({ tasks, onSelectItem }: DeadlineMonitorProps) => {
         return null;
     }
 
-    const getDueDateText = (dueDate: string, isAtRisk: boolean) => {
-        const date = new Date(dueDate);
+    const getDueDateText = (dueDateString: string, isAtRisk: boolean) => {
+        const date = new Date(dueDateString);
+        if (isNaN(date.getTime())) return 'Invalid Date';
+
         const today = startOfDay(new Date());
         if (isAtRisk) {
             if (isToday(date)) return 'Due Today';

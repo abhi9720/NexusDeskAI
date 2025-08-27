@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatSession, Task, Note, ActiveSelection } from '../types';
 import { SparklesIcon, ArrowUpIcon, UserCircleIcon, PlusIcon, HistoryIcon, EllipsisHorizontalIcon, MicrophoneIcon } from './icons';
 import VoiceInputModal from './VoiceInputModal';
+import { marked } from 'marked';
 
 // In-browser speech recognition can be inconsistent, so we declare the type to avoid TS errors
 declare global {
@@ -11,16 +12,29 @@ declare global {
   }
 }
 
-const CreatedItemCard = ({ item, onView }: { item: Task | Note, onView: () => void }) => {
+const CreatedItemCard = ({ item, onView, toolName }: { item: Task | Note, onView: () => void, toolName: string }) => {
+  // Defensive checks for malformed item data from tool calls or history.
+  if (!item || typeof item.title !== 'string') {
+    return null;
+  }
   const isTask = 'status' in item;
+
+  let actionText = 'Created';
+  if (toolName.startsWith('update')) {
+      actionText = 'Updated';
+  } else if (toolName.startsWith('delete')) {
+      // A card for a deleted item shouldn't really be shown, but this handles it.
+      actionText = 'Deleted';
+  }
+
   return (
     <div className="bg-gray-100 dark:bg-gray-700/50 rounded-lg p-3 my-2 border border-gray-200 dark:border-gray-600">
       <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-        {isTask ? 'Task Created' : 'Note Created'}
+        {isTask ? `Task ${actionText}` : `Note ${actionText}`}
       </p>
       <h4 className="font-semibold text-gray-800 dark:text-white">{item.title}</h4>
       <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
-        {isTask ? (item as Task).description : (item as Note).content}
+        {isTask ? ((item as Task).description || '') : ((item as Note).content || '').replace(/<[^>]*>?/gm, '')}
       </p>
       <button onClick={onView} className="text-sm font-semibold text-primary mt-2 hover:underline">
         View {isTask ? 'Task' : 'Note'}
@@ -39,10 +53,11 @@ interface AIChatViewProps {
     onDetailItemChange: (item: Task | Note | null) => void;
     onActiveSelectionChange: (selection: ActiveSelection) => void;
     activeSelection: ActiveSelection;
+    isLoading: boolean;
 }
 
 const WelcomeScreen = ({ onExampleClick }: { onExampleClick: (prompt: string) => void }) => (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4 animate-fade-in">
+    <div className="flex flex-col items-center justify-center text-center p-4 animate-fade-in">
       <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center mb-6 shadow-lg">
         <SparklesIcon className="w-10 h-10 text-white" />
       </div>
@@ -57,9 +72,8 @@ const WelcomeScreen = ({ onExampleClick }: { onExampleClick: (prompt: string) =>
     </div>
 );
 
-const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelectChatSession, onAddItem, onDetailItemChange, onActiveSelectionChange, activeSelection }: AIChatViewProps) => {
+const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelectChatSession, onAddItem, onDetailItemChange, onActiveSelectionChange, activeSelection, isLoading }: AIChatViewProps) => {
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     
@@ -80,13 +94,13 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    useEffect(scrollToBottom, [messages]);
+    useEffect(scrollToBottom, [messages, isLoading]);
     
     useEffect(() => {
         if (!isLoading) {
-            setInput('');
+            inputRef.current?.focus();
         }
-    }, [isLoading]);
+    }, [isLoading, activeSession]);
     
      useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -104,9 +118,7 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         
         const messageToSend = input;
         setInput('');
-        setIsLoading(true);
         await onSendMessage(messageToSend);
-        setIsLoading(false);
     };
     
     const handleViewItem = (item: Task | Note) => {
@@ -119,6 +131,7 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
     const handleExampleClick = (prompt: string) => {
         if (isLoading) return;
         setInput(prompt);
+        inputRef.current?.focus();
     };
 
     const handleTranscriptComplete = (transcript: string) => {
@@ -126,6 +139,8 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
         setIsVoiceModalOpen(false);
         setTimeout(() => inputRef.current?.focus(), 100);
     };
+    
+    const hasMessages = messages.length > 0 || isLoading;
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-brand-dark">
@@ -163,45 +178,63 @@ const AIChatView = ({ activeSession, sessions, onSendMessage, onNewChat, onSelec
                     </button>
                 </div>
             </header>
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                 {messages.length === 0 && !isLoading && <WelcomeScreen onExampleClick={handleExampleClick} />}
-                {messages.map(msg => (
-                    <div key={msg.id} className={`flex items-start gap-4 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                         {msg.role === 'model' && (
-                             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                                 <SparklesIcon className="w-5 h-5 text-white" />
-                             </div>
-                         )}
-                        <div className={`max-w-xl rounded-lg p-4 ${msg.role === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-gray-100 dark:bg-gray-800 rounded-bl-none'}`}>
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
-                            {msg.toolResult?.data && (
-                              <CreatedItemCard item={msg.toolResult.data} onView={() => handleViewItem(msg.toolResult.data)} />
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col">
+                 <div className={`flex flex-col flex-grow ${hasMessages ? 'justify-end' : 'justify-center'}`}>
+                    {!hasMessages ? (
+                        <WelcomeScreen onExampleClick={handleExampleClick} />
+                    ) : (
+                        <div className="space-y-6">
+                            {messages.map(msg => (
+                                <div key={msg.id} className={`flex items-start gap-4 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                                     {msg.role === 'model' && (
+                                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                             <SparklesIcon className="w-5 h-5 text-white" />
+                                         </div>
+                                     )}
+                                    <div className={`max-w-xl rounded-lg p-4 ${msg.role === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-gray-100 dark:bg-gray-800 rounded-bl-none'}`}>
+                                       {msg.role === 'model' ? (
+                                            <div
+                                                className="prose prose-sm dark:prose-invert max-w-none"
+                                                dangerouslySetInnerHTML={{ __html: marked.parse(msg.text || '') as string }}
+                                            />
+                                        ) : (
+                                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                                        )}
+                                        {msg.toolResult?.data && !msg.toolResult.toolName.startsWith('delete') && (
+                                          <CreatedItemCard 
+                                            item={msg.toolResult.data} 
+                                            onView={() => handleViewItem(msg.toolResult.data)} 
+                                            toolName={msg.toolResult.toolName}
+                                          />
+                                        )}
+                                    </div>
+                                    {msg.role === 'user' && (
+                                         <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                             <UserCircleIcon className="w-6 h-6 text-gray-500" />
+                                         </div>
+                                     )}
+                                </div>
+                            ))}
+                            {isLoading && (
+                                 <div className="flex items-start gap-4">
+                                     <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 animate-pulse">
+                                         <SparklesIcon className="w-5 h-5 text-white" />
+                                     </div>
+                                     <div className="max-w-xl rounded-lg p-4 bg-gray-100 dark:bg-gray-800 rounded-bl-none">
+                                         <div className="flex items-center space-x-2">
+                                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                                             <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                                         </div>
+                                     </div>
+                                </div>
                             )}
                         </div>
-                        {msg.role === 'user' && (
-                             <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                 <UserCircleIcon className="w-6 h-6 text-gray-500" />
-                             </div>
-                         )}
-                    </div>
-                ))}
-                {isLoading && activeSession && (
-                     <div className="flex items-start gap-4">
-                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 animate-pulse">
-                             <SparklesIcon className="w-5 h-5 text-white" />
-                         </div>
-                         <div className="max-w-xl rounded-lg p-4 bg-gray-100 dark:bg-gray-800 rounded-bl-none">
-                             <div className="flex items-center space-x-2">
-                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
-                                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
-                             </div>
-                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
                 <div ref={messagesEndRef} />
             </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700/80">
+            <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700/80">
                 <form onSubmit={handleSendMessage} className="relative">
                     <textarea
                         ref={inputRef}

@@ -1,3 +1,4 @@
+import { Task } from '../types';
 import { webStorage } from './webStorage';
 import { desktopStorage } from './desktopStorage';
 
@@ -10,6 +11,8 @@ declare global {
             update: (collection: string, id: string | number, data: any) => Promise<any>;
             delete: (collection: string, id: string | number) => Promise<void>;
             saveAttachment: (file: { name: string, buffer: Uint8Array }) => Promise<string>;
+            searchHybrid: (query: string) => Promise<Task[]>;
+            sendNotification: (options: { title: string, body?: string }) => void;
         };
     }
 }

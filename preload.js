@@ -6,5 +6,8 @@ contextBridge.exposeInMainWorld('desktopStorage', {
     add: (table, data) => ipcRenderer.invoke('db:add', table, data),
     update: (table, id, data) => ipcRenderer.invoke('db:update', table, id, data),
     delete: (table, id) => ipcRenderer.invoke('db:delete', table, id),
-    saveAttachment: (file) => ipcRenderer.invoke('save-attachment', file)
+    saveAttachment: (file) => ipcRenderer.invoke('save-attachment', file),
+    searchHybrid: (query) => ipcRenderer.invoke('db:searchHybrid', query),
+    sendNotification: (options) => ipcRenderer.send('show-notification', options)
+
 });

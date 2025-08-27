@@ -22,8 +22,7 @@ const GlobalSearchModal = ({ isOpen, onClose, tasks, notes, onSelectItem }: Glob
     }
     const lowercasedTerm = searchTerm.toLowerCase();
     const filteredTasks = tasks.filter(task =>
-      task.title.toLowerCase().includes(lowercasedTerm) ||
-      task.description.toLowerCase().includes(lowercasedTerm)
+      task.title.toLowerCase().includes(lowercasedTerm)
     );
     const filteredNotes = notes.filter(note =>
       note.title.toLowerCase().includes(lowercasedTerm) ||
@@ -36,15 +35,13 @@ const GlobalSearchModal = ({ isOpen, onClose, tasks, notes, onSelectItem }: Glob
   
   useEffect(() => {
     if (isOpen) {
-      inputRef.current?.focus();
-      // Reset state on open
+      setTimeout(() => inputRef.current?.focus(), 100);
       setSearchTerm('');
       setActiveIndex(0);
     }
   }, [isOpen]);
 
   useEffect(() => {
-    // Reset active index when search term changes
     setActiveIndex(0);
   }, [searchTerm]);
   
@@ -103,12 +100,12 @@ const GlobalSearchModal = ({ isOpen, onClose, tasks, notes, onSelectItem }: Glob
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex justify-center items-start backdrop-blur-sm pt-[15vh]"
+      className="fixed inset-0 bg-black/60 z-50 flex justify-center items-start backdrop-blur-lg pt-[15vh] animate-fade-in-overlay"
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >
       <div
-        className="bg-card-light dark:bg-card-dark rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-fade-in"
+        className="bg-card-light dark:bg-card-dark rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-scale-in"
         onClick={e => e.stopPropagation()}
       >
         <div className="relative">
@@ -152,14 +149,12 @@ const GlobalSearchModal = ({ isOpen, onClose, tasks, notes, onSelectItem }: Glob
         </div>
         
         <div className="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500 flex justify-between items-center">
-            <span>
-                <kbd className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-md font-mono text-xs">↑</kbd>
-                <kbd className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-md font-mono text-xs">↓</kbd> to navigate,
-                <kbd className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-md font-mono text-xs">↵</kbd> to select
-            </span>
-            <span>
-                 <kbd className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded-md font-mono text-xs">esc</kbd> to close
-            </span>
+            <span>{allResults.length} results</span>
+            <div className="flex items-center gap-2">
+                <span>Navigate: ↑↓</span>
+                <span>Select: ↵</span>
+                <span>Close: Esc</span>
+            </div>
         </div>
       </div>
     </div>

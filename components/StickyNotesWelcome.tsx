@@ -1,5 +1,5 @@
 import React from 'react';
-import { PinIcon, SparklesIcon, LightBulbIcon, PaletteIcon, CheckIcon } from './icons';
+import { PinIcon, SparklesIcon, PaletteIcon, CheckIcon, PencilIcon, FullScreenIcon } from './icons';
 
 const FeatureItem = ({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) => (
     <div className="flex items-start space-x-4">
@@ -25,21 +25,26 @@ const StickyNotesWelcome = () => {
                             <p className="text-sm text-gray-700 mt-2">The client is very satisfied with the current proposal...</p>
                          </div>
                          <div className="absolute w-48 h-48 bg-purple-300 rounded-lg shadow-xl p-4 transform rotate-6 top-20 left-24">
-                            <h3 className="font-bold text-gray-800">Go Grocery Shopping</h3>
+                            <h3 className="font-bold text-gray-800">Grocery List</h3>
                             <ul className="text-sm mt-2 space-y-1">
-                                <li className="flex items-center"><CheckIcon className="w-4 h-4 mr-2 text-primary"/>Skim Milk</li>
+                                <li className="flex items-center line-through opacity-60"><CheckIcon className="w-4 h-4 mr-2 text-primary"/>Skim Milk</li>
                                 <li className="flex items-center">Eggs</li>
                             </ul>
                          </div>
                     </div>
                 </div>
                 <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Desktop Sticky Notes</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">A Canvas for Your Ideas</h2>
                     <div className="space-y-5">
                         <FeatureItem 
-                            icon={<PinIcon className="w-6 h-6"/>}
-                            title="Pin Your Ideas"
-                            description="Keep your notes on a dedicated canvas, so you never miss them."
+                            icon={<PencilIcon className="w-6 h-6"/>}
+                            title="Markdown & Checklists"
+                            description="Format notes with Markdown and track tasks with interactive checklists."
+                        />
+                         <FeatureItem 
+                            icon={<FullScreenIcon className="w-6 h-6"/>}
+                            title="Freely Resizable"
+                            description="Drag the corner of any note to resize it to fit your content."
                         />
                          <FeatureItem 
                             icon={<SparklesIcon className="w-6 h-6"/>}
@@ -48,13 +53,8 @@ const StickyNotesWelcome = () => {
                         />
                          <FeatureItem 
                             icon={<PaletteIcon className="w-6 h-6"/>}
-                            title="Various Colors"
+                            title="Color-Coded"
                             description="Select from a range of colors to categorize and personalize your notes."
-                        />
-                         <FeatureItem 
-                            icon={<LightBulbIcon className="w-6 h-6"/>}
-                            title="Instant Capture"
-                            description="Seamlessly edit titles, content, or checklists without a separate edit mode."
                         />
                     </div>
                 </div>

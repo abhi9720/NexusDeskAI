@@ -93,8 +93,8 @@ const AITaskParserModal = ({ isOpen, onClose, onAddItem, lists }: AITaskParserMo
     const taskLists = lists.filter(l => l.type === 'task');
 
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl w-full max-w-4xl m-4 h-[90vh] flex flex-col animate-fade-in" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md" onClick={onClose}>
+            <div className="bg-page dark:bg-page-dark rounded-2xl shadow-2xl w-full max-w-4xl m-4 h-[90vh] flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
                 <header className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <SparklesIcon className="w-6 h-6 text-primary" />

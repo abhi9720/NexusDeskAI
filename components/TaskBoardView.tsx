@@ -26,7 +26,16 @@ const priorityColors: Record<Priority, { dot: string, text: string }> = {
     [Priority.Low]: { dot: 'bg-green-500', text: 'text-green-500' },
 };
 
-const TaskCard = ({ task, onClick, onDragStart, onStartFocus }: { task: Task; onClick: () => void; onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void; onStartFocus: (task: Task) => void; }) => {
+interface TaskCardProps {
+    task: Task;
+    onClick: () => void;
+    onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
+    onStartFocus: (task: Task) => void;
+    isGhost: boolean;
+    isDropped: boolean;
+}
+
+const TaskCard = ({ task, onClick, onDragStart, onStartFocus, isGhost, isDropped }: TaskCardProps) => {
     const dueDate = new Date(task.dueDate);
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -37,7 +46,7 @@ const TaskCard = ({ task, onClick, onDragStart, onStartFocus }: { task: Task; on
             draggable
             onDragStart={(e) => onDragStart(e, String(task.id))}
             onClick={onClick}
-            className="p-4 mb-4 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all group relative"
+            className={`p-4 mb-4 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all group relative ${isGhost ? 'opacity-40' : ''} ${isDropped ? 'animate-scale-in' : ''}`}
             role="button"
             aria-label={`View task: ${task.title}`}
         >
@@ -93,14 +102,17 @@ interface TaskColumnProps {
     list?: List;
     onCardClick: (task: Task) => void;
     onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
-    onDrop: (e: React.DragEvent<HTMLDivElement>, status: Status) => void;
     onUpdateList?: (list: List) => void;
     onUpdateColumnName: (status: Status, newName: string) => void;
     onStartFocus: (task: Task) => void;
+    draggedTaskId: string | null;
+    droppedTaskId: string | null;
+    isTaskDragOver: boolean;
+    isDraggable: boolean;
+    onHeaderDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
 }
 
-const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, onUpdateList, onUpdateColumnName, onStartFocus }: TaskColumnProps) => {
-    const [isOver, setIsOver] = useState(false);
+const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onUpdateList, onUpdateColumnName, onStartFocus, draggedTaskId, droppedTaskId, isTaskDragOver, isDraggable, onHeaderDragStart }: TaskColumnProps) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [columnName, setColumnName] = useState(mapping.name);
@@ -157,12 +169,13 @@ const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, on
 
     return (
         <div
-            onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
-            onDragLeave={() => setIsOver(false)}
-            onDrop={(e) => { onDrop(e, mapping.status); setIsOver(false); }}
-            className={`flex-shrink-0 w-80 p-3 bg-gray-100 dark:bg-gray-900 rounded-xl transition-colors h-full ${isOver ? 'bg-primary/10' : ''}`}
+            className={`flex-shrink-0 w-80 p-3 bg-gray-100 dark:bg-sidebar-dark rounded-xl transition-colors h-full ${isTaskDragOver ? 'bg-primary/10' : ''}`}
         >
-            <div className="flex items-center space-x-2 mb-4 px-1">
+            <div
+                draggable={isDraggable}
+                onDragStart={onHeaderDragStart}
+                className={`flex items-center space-x-2 mb-4 px-1 ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            >
                 <span className={`w-3 h-3 rounded-full ${statusConfig[mapping.status].color}`}></span>
                 {isEditingName ? (
                     <input
@@ -200,7 +213,15 @@ const TaskColumn = ({ mapping, tasks, list, onCardClick, onDragStart, onDrop, on
             </div>
             <div className="space-y-4 h-[calc(100%-40px)] overflow-y-auto pr-1 -mr-2">
                 {tasks.map(task => (
-                    <TaskCard key={task.id} task={task} onClick={() => onCardClick(task)} onDragStart={onDragStart} onStartFocus={onStartFocus} />
+                    <TaskCard 
+                        key={task.id} 
+                        task={task} 
+                        onClick={() => onCardClick(task)} 
+                        onDragStart={onDragStart} 
+                        onStartFocus={onStartFocus}
+                        isGhost={draggedTaskId === String(task.id)}
+                        isDropped={droppedTaskId === String(task.id)}
+                    />
                 ))}
             </div>
         </div>
@@ -257,19 +278,87 @@ const AddColumn = ({ list, onUpdateList }: { list: List; onUpdateList: (list: Li
 }
 
 const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList, onStartFocus }: TaskBoardViewProps) => {
+    const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+    const [droppedTaskId, setDroppedTaskId] = useState<string | null>(null);
+    const [taskDragOverColumn, setTaskDragOverColumn] = useState<Status | null>(null);
+    const [draggedColumn, setDraggedColumn] = useState<Status | null>(null);
+    const [dragOverColumn, setDragOverColumn] = useState<Status | null>(null);
 
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
+    const handleTaskDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
         e.dataTransfer.setData('taskId', taskId);
+        setDraggedTaskId(taskId);
     };
 
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: Status) => {
-        const taskId = e.dataTransfer.getData('taskId');
-        const taskToMove = tasks.find(t => t.id === parseInt(taskId, 10));
-        if (taskToMove && taskToMove.status !== newStatus) {
-            onUpdateTask({ ...taskToMove, status: newStatus });
+    const handleTaskDragEnd = () => {
+        setDraggedTaskId(null);
+    };
+
+    const handleColumnDragStart = (e: React.DragEvent<HTMLDivElement>, status: Status) => {
+        e.dataTransfer.setData('columnStatus', status);
+        setDraggedColumn(status);
+    };
+
+    const handleColumnDragEnd = () => {
+        setDraggedColumn(null);
+        setDragOverColumn(null);
+    };
+
+    const handleGenericDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+    };
+
+    const handleGenericDragEnter = (e: React.DragEvent<HTMLDivElement>, status: Status) => {
+        e.preventDefault();
+        if (draggedTaskId) {
+            setTaskDragOverColumn(status);
+        } else if (draggedColumn && draggedColumn !== status) {
+            setDragOverColumn(status);
         }
     };
 
+    const handleGenericDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setTaskDragOverColumn(null);
+        setDragOverColumn(null);
+    };
+    
+    const handleGenericDrop = (e: React.DragEvent<HTMLDivElement>, targetStatus: Status) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('taskId');
+        const draggedStatus = e.dataTransfer.getData('columnStatus') as Status;
+
+        setTaskDragOverColumn(null);
+        setDragOverColumn(null);
+
+        if (taskId) {
+            const taskToMove = tasks.find(t => t.id === parseInt(taskId, 10));
+            setDraggedTaskId(null);
+            if (taskToMove && taskToMove.status !== targetStatus) {
+                onUpdateTask({ ...taskToMove, status: targetStatus });
+                setDroppedTaskId(taskId);
+                setTimeout(() => setDroppedTaskId(null), 200);
+            }
+        } else if (draggedStatus) {
+            if (!draggedStatus || draggedStatus === targetStatus || !list || !onUpdateList || !list.statuses) {
+                setDraggedColumn(null);
+                return;
+            }
+
+            const statuses = list.statuses;
+            const draggedIndex = statuses.findIndex(s => s.status === draggedStatus);
+            const targetIndex = statuses.findIndex(s => s.status === targetStatus);
+
+            if (draggedIndex === -1 || targetIndex === -1) return;
+
+            const newStatuses = [...statuses];
+            const [draggedItem] = newStatuses.splice(draggedIndex, 1);
+            newStatuses.splice(targetIndex, 0, draggedItem);
+
+            onUpdateList({ ...list, statuses: newStatuses });
+            setDraggedColumn(null);
+        }
+    };
+    
     const handleUpdateColumnName = (statusToUpdate: Status, newName: string) => {
         if (list && onUpdateList && list.statuses) {
             const updatedStatuses = list.statuses.map(mapping => 
@@ -280,11 +369,9 @@ const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList, 
     };
 
     const columnsToDisplay = useMemo(() => {
-        // For a specific list with customizable statuses
         if (list?.statuses) {
             return list.statuses;
         }
-        // For smart lists (like 'Today'), show all statuses that have tasks
         const statusesWithTasks = new Set(tasks.map(t => t.status));
         return Object.values(Status)
             .filter(s => statusesWithTasks.has(s))
@@ -302,20 +389,38 @@ const TaskBoardView = ({ tasks, list, onSelectTask, onUpdateTask, onUpdateList, 
 
 
     return (
-        <div className="flex-grow flex space-x-6 p-4 overflow-x-auto h-full">
+        <div className="flex-grow flex space-x-6 p-4 overflow-x-auto h-full" onDragEnd={handleTaskDragEnd}>
             {columnsToDisplay.map(mapping => (
-                <TaskColumn
+                <div
                     key={mapping.status}
-                    mapping={mapping}
-                    tasks={tasksByStatus[mapping.status] || []}
-                    list={list}
-                    onCardClick={onSelectTask}
-                    onDragStart={handleDragStart}
-                    onDrop={handleDrop}
-                    onUpdateList={onUpdateList}
-                    onUpdateColumnName={handleUpdateColumnName}
-                    onStartFocus={onStartFocus}
-                />
+                    className="relative"
+                    onDrop={(e) => handleGenericDrop(e, mapping.status)}
+                    onDragOver={handleGenericDragOver}
+                    onDragEnter={(e) => handleGenericDragEnter(e, mapping.status)}
+                    onDragLeave={handleGenericDragLeave}
+                    onDragEnd={handleColumnDragEnd}
+                >
+                    <div className={`transition-all duration-200 ${draggedColumn === mapping.status ? 'opacity-40 scale-95' : 'opacity-100 scale-100'}`}>
+                         <TaskColumn
+                            mapping={mapping}
+                            tasks={tasksByStatus[mapping.status] || []}
+                            list={list}
+                            onCardClick={onSelectTask}
+                            onUpdateList={onUpdateList}
+                            onUpdateColumnName={handleUpdateColumnName}
+                            onStartFocus={onStartFocus}
+                            draggedTaskId={draggedTaskId}
+                            droppedTaskId={droppedTaskId}
+                            onDragStart={handleTaskDragStart}
+                            isTaskDragOver={taskDragOverColumn === mapping.status}
+                            isDraggable={!!(list && onUpdateList)}
+                            onHeaderDragStart={(e) => handleColumnDragStart(e, mapping.status)}
+                        />
+                    </div>
+                    {dragOverColumn === mapping.status && (
+                        <div className="absolute top-0 -left-3 w-1.5 h-full bg-primary rounded-full z-20 pointer-events-none"></div>
+                    )}
+                </div>
             ))}
             {list && onUpdateList && (
                 <AddColumn list={list} onUpdateList={onUpdateList} />

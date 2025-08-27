@@ -3,6 +3,7 @@ import { Task, TaskAnalysis, Priority, Status, Attachment, ChecklistItem } from 
 import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon } from './icons';
 import { analyzeTaskAndSuggestSubtasks } from '../services/geminiService';
 import AddTaskModal from './AddTaskModal'; // Reusing some styles and structure
+import { format } from 'date-fns';
 
 interface TaskModalProps {
   task: Task | null;
@@ -13,6 +14,15 @@ interface TaskModalProps {
 
 const newId = () => Date.now() + Math.floor(Math.random() * 1000);
 
+const getValidDateForInput = (dateString: string | undefined | null): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return '';
+    }
+    return format(date, 'yyyy-MM-dd');
+};
+
 const priorityColors: Record<Priority, string> = {
   [Priority.High]: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
   [Priority.Medium]: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200',
@@ -20,7 +30,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const AttachmentDisplay = ({ attachment }: { attachment: Attachment }) => {
-    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `safe-file://${attachment.url}`;
 
     if (attachment.type.startsWith('image/')) {
         return <a href={srcUrl} target="_blank" rel="noopener noreferrer"><img src={srcUrl} alt={attachment.name} className="max-h-40 w-auto rounded-lg object-contain border dark:border-gray-600"/></a>;
@@ -159,13 +169,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
       )}
 
       <div className="bg-white/50 dark:bg-black/20 p-4 rounded-lg">
-        <div className="flex justify-between items-center flex-wrap gap-2">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">AI Task Analysis</h3>
-          <button onClick={handleAnalyze} disabled={isAnalyzing} className="flex items-center space-x-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark disabled:bg-primary-light disabled:cursor-not-allowed transition-all transform hover:scale-105">
-            <SparklesIcon className="w-5 h-5" />
-            <span>{isAnalyzing ? 'Analyzing...' : 'Analyze Task'}</span>
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white">AI Task Analysis</h3>
         
         {isAnalyzing && <div className="text-center p-8"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div></div>}
         {error && <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-lg">{error}</div>}
@@ -179,7 +183,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
               <h4 className="font-semibold mt-2 mb-2">Suggested Subtasks:</h4>
               <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
                 {analysis.subtasks.map((sub, i) => (
-                  <li key={i}>{sub.title} ({sub.hours}h)</li>
+                  <li key={i}>{sub.title}</li>
                 ))}
               </ul>
             </div>
@@ -197,7 +201,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
           </div>
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-            <textarea id="description" value={editedTask?.description || ''} onChange={e => handleEditChange('description', e.target.value)} rows={4} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"/>
+            <textarea id="description" value={editedTask?.description || ''} onChange={e => handleEditChange('description', e.target.value)} rows={3} className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"/>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Checklist</label>
@@ -217,7 +221,7 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div>
               <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-              <input type="date" id="dueDate" value={editedTask?.dueDate || ''} onChange={e => handleEditChange('dueDate', e.target.value)} required className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"/>
+              <input type="date" id="dueDate" value={getValidDateForInput(editedTask?.dueDate)} onChange={e => { if(e.target.value) { handleEditChange('dueDate', new Date(`${e.target.value}T00:00:00`).toISOString()) } }} required className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"/>
             </div>
             <div>
               <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
@@ -234,39 +238,57 @@ const TaskModal = ({ task, onClose, onUpdateTask, onDeleteTask }: TaskModalProps
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-start backdrop-blur-sm pt-10" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto transform transition-all animate-fade-in" onClick={e => e.stopPropagation()}>
-        <div className="p-6">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white pr-4">{task.title}</h2>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              {!isEditing && (
-                  <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary-dark dark:hover:text-primary-light" aria-label="Edit Task">
-                      <PencilIcon className="w-5 h-5" />
-                  </button>
-              )}
-              <button onClick={handleDelete} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" aria-label="Delete Task">
-                  <TrashIcon className="w-5 h-5" />
-              </button>
-              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close modal">
-                  <XMarkIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-              </button>
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="relative bg-page dark:bg-page-dark rounded-2xl shadow-2xl w-full max-w-2xl m-4 max-h-[90vh] flex flex-col transform transition-all animate-scale-in" onClick={e => e.stopPropagation()}>
+        <div className="flex-grow overflow-y-auto pb-20">
+            <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white pr-4">{task.title}</h2>
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                {!isEditing && (
+                    <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary-dark dark:hover:text-primary-light" aria-label="Edit Task">
+                        <PencilIcon className="w-5 h-5" />
+                    </button>
+                )}
+                <button onClick={handleDelete} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" aria-label="Delete Task">
+                    <TrashIcon className="w-5 h-5" />
+                </button>
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close modal">
+                    <XMarkIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                </button>
+                </div>
             </div>
-          </div>
 
-          {!isEditing && (
-              <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
-                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${priorityColors[task.priority]}`}>{task.priority} Priority</span>
-                <span className="flex items-center space-x-1.5 text-gray-600 dark:text-gray-400">
-                    <ClockIcon className={`w-4 h-4 ${isOverdue ? 'text-red-500' : ''}`} />
-                    <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                </span>
-                <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{task.status}</span>
-              </div>
-          )}
+            {!isEditing && (
+                <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${priorityColors[task.priority]}`}>{task.priority} Priority</span>
+                    <span className="flex items-center space-x-1.5 text-gray-600 dark:text-gray-400">
+                        <ClockIcon className={`w-4 h-4 ${isOverdue ? 'text-red-500' : ''}`} />
+                        <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                    </span>
+                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{task.status}</span>
+                </div>
+            )}
 
-          {isEditing ? renderEditMode() : renderViewMode()}
+            {isEditing ? renderEditMode() : renderViewMode()}
+            </div>
         </div>
+        {!isEditing && (
+            <div className="absolute bottom-6 right-6 z-10">
+                <button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className="w-14 h-14 bg-primary rounded-full text-white flex items-center justify-center shadow-lg hover:bg-primary-dark disabled:bg-primary/70 disabled:cursor-not-allowed transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-offset-page-dark"
+                    title="Analyze with AI"
+                    aria-label="Analyze with AI"
+                >
+                    {isAnalyzing 
+                        ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        : <SparklesIcon className="w-7 h-7" />
+                    }
+                </button>
+            </div>
+        )}
       </div>
     </div>
   );

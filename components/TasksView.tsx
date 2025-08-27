@@ -108,27 +108,15 @@ const TaskColumn = ({ status, tasks, onCardClick, onDragStart, onDrop }: TaskCol
 
 
 // --- List View Components ---
-const TaskListItem = ({ task, onUpdate, onSelect }: { task: Task; onUpdate: (task: Task) => void; onSelect: (task: Task) => void; }) => {
-    const handleToggleComplete = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newStatus = e.target.checked ? Status.Done : Status.ToDo;
-        onUpdate({ ...task, status: newStatus });
-    };
-
+const TaskListItem = ({ task, onSelect }: { task: Task; onSelect: (task: Task) => void; }) => {
     const dueDate = new Date(task.dueDate);
     const today = new Date();
     today.setHours(0,0,0,0);
     const isOverdue = dueDate < today && task.status !== Status.Done;
     
     return (
-        <div className="flex items-center p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 group" >
-            <input 
-                type="checkbox"
-                checked={task.status === Status.Done}
-                onChange={handleToggleComplete}
-                className="h-5 w-5 rounded-full border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-2 mr-4 flex-shrink-0"
-                aria-label={`Mark task ${task.title} as ${task.status === Status.Done ? 'not complete' : 'complete'}`}
-            />
-            <div onClick={() => onSelect(task)} className="flex-grow cursor-pointer">
+        <div onClick={() => onSelect(task)} className="flex items-center p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 group cursor-pointer" >
+            <div className="flex-grow cursor-pointer">
                 <p className={`text-gray-800 dark:text-gray-100 ${task.status === Status.Done ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{task.title}</p>
                 <div className="flex items-center text-xs space-x-3 text-gray-500 dark:text-gray-400 mt-1">
                      <span className={`flex items-center space-x-1 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
@@ -145,13 +133,13 @@ const TaskListItem = ({ task, onUpdate, onSelect }: { task: Task; onUpdate: (tas
     );
 };
 
-const TaskListGroup = ({ title, tasks, onUpdate, onSelect }: { title: string, tasks: Task[], onUpdate: (task: Task) => void; onSelect: (task: Task) => void; }) => {
+const TaskListGroup = ({ title, tasks, onSelect }: { title: string, tasks: Task[], onSelect: (task: Task) => void; }) => {
     if (tasks.length === 0) return null;
     return (
         <div className="mb-6">
             <h3 className="font-semibold text-gray-700 dark:text-gray-300 px-3 mb-2">{title} ({tasks.length})</h3>
             {tasks.map(task => (
-                <TaskListItem key={task.id} task={task} onUpdate={onUpdate} onSelect={onSelect} />
+                <TaskListItem key={task.id} task={task} onSelect={onSelect} />
             ))}
         </div>
     )
@@ -189,8 +177,7 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
   const filteredTasks = React.useMemo(() => {
     return tasks.filter(task => {
         const keywordMatch = taskFilter.keyword
-            ? task.title.toLowerCase().includes(taskFilter.keyword.toLowerCase()) || 
-              task.description.toLowerCase().includes(taskFilter.keyword.toLowerCase())
+            ? task.title.toLowerCase().includes(taskFilter.keyword.toLowerCase())
             : true;
 
         const priorityMatch = taskFilter.priority === 'all' || task.priority === taskFilter.priority;
@@ -318,11 +305,11 @@ const TasksView = ({ tasks, onAddTask, onUpdateTask, onDeleteTask, taskFilter, s
             </div>
         ) : (
             <div className="flex-grow overflow-y-auto">
-                <TaskListGroup title="Overdue" tasks={groupedTasksForList.overdue} onUpdate={onUpdateTask} onSelect={setSelectedTask} />
-                <TaskListGroup title="Today" tasks={groupedTasksForList.today} onUpdate={onUpdateTask} onSelect={setSelectedTask} />
-                <TaskListGroup title="Tomorrow" tasks={groupedTasksForList.tomorrow} onUpdate={onUpdateTask} onSelect={setSelectedTask} />
-                <TaskListGroup title="Upcoming" tasks={groupedTasksForList.upcoming} onUpdate={onUpdateTask} onSelect={setSelectedTask} />
-                <TaskListGroup title="Completed" tasks={groupedTasksForList.completed} onUpdate={onUpdateTask} onSelect={setSelectedTask} />
+                <TaskListGroup title="Overdue" tasks={groupedTasksForList.overdue} onSelect={setSelectedTask} />
+                <TaskListGroup title="Today" tasks={groupedTasksForList.today} onSelect={setSelectedTask} />
+                <TaskListGroup title="Tomorrow" tasks={groupedTasksForList.tomorrow} onSelect={setSelectedTask} />
+                <TaskListGroup title="Upcoming" tasks={groupedTasksForList.upcoming} onSelect={setSelectedTask} />
+                <TaskListGroup title="Completed" tasks={groupedTasksForList.completed} onSelect={setSelectedTask} />
             </div>
         )}
        

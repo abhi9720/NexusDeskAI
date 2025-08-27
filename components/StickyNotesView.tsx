@@ -15,15 +15,15 @@ const StickyNotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: Stick
     
     const handleOrganizeNotes = () => {
         const margin = 20;
-        const noteWidth = 256; // w-64
-        const noteHeight = 224; // h-56
-        const containerWidth = window.innerWidth - 256; // Adjust for sidebar width
+        const noteWidth = 256; // default width
+        const noteHeight = 224; // default height
+        const containerWidth = window.innerWidth - 80; // Account for smallest sidebar width
 
         let x = margin;
         let y = margin;
 
         notes.forEach(note => {
-            onUpdateNote({ ...note, position: { x, y } });
+            onUpdateNote({ ...note, position: { x, y }, size: { width: noteWidth, height: noteHeight } });
             x += noteWidth + margin;
             if (x + noteWidth > containerWidth) {
                 x = margin;
@@ -34,8 +34,8 @@ const StickyNotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: Stick
     
     return (
         <div className="relative w-full h-full overflow-hidden bg-gray-100 dark:bg-gray-900/50 bg-[linear-gradient(to_right,theme(colors.gray.200/50)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.gray.200/50)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,theme(colors.gray.700/50)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.gray.700/50)_1px,transparent_1px)] bg-[size:2rem_2rem]">
-             <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-white/80 dark:bg-brand-dark/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700/80">
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Sticky Notes</h2>
+             <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-page/90 dark:bg-page-dark/90 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700/80">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Sticky Notes</h2>
                 <div className="flex items-center space-x-2">
                      <button
                         onClick={handleOrganizeNotes}

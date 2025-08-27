@@ -1,5 +1,5 @@
 {
-  "name": "TaskFlow AI",
+  "name": "Advnace Desktop Taskflow AI",
   "description": "An intelligent task and project management application that uses agentic AI to help you plan, execute, and learn more effectively. Features include smart task breakdown, note summarization, and a personal productivity dashboard.",
   "requestFramePermissions": [
     "camera",

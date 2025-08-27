@@ -3,16 +3,16 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface CustomTheme {
-  id: string; // Stays string as it's not in the main DB
+  id: string; 
   name: string;
   colors: {
-    primary: string;      // Accent
-    brandLight: string;   // Page background (Light)
-    sidebarLight: string; // Sidebar background (Light)
-    cardLight: string;    // Card background (Light)
-    brandDark: string;    // Page background (Dark)
-    sidebarDark: string;  // Sidebar background (Dark)
-    cardDark: string;     // Card background (Dark)
+    primary: string;            // Accent color for buttons, links, etc.
+    pageBackgroundLight: string;   
+    containerBackgroundLight: string; 
+    cardBackgroundLight: string;    
+    pageBackgroundDark: string;    
+    containerBackgroundDark: string;  
+    cardBackgroundDark: string;     
   };
 }
 
@@ -44,7 +44,8 @@ export interface List {
   name: string;
   color: string;
   type: 'task' | 'note';
-  defaultView?: 'list' | 'board' | 'calendar';
+  parentId: number | null; // For nesting lists/folders
+  defaultView?: 'list' | 'board' | 'calendar' | 'table';
   statuses?: ListStatusMapping[];
 }
 
@@ -67,45 +68,84 @@ export interface StickyNote {
     content: string;
     color: string;
     position: { x: number; y: number };
+    size: { width: number; height: number };
 }
 
-// --- New Goal & Habit Tracking Types ---
+// --- New Goal Tracking Types ---
+export enum GoalStatus {
+  OnTrack = 'On Track',
+  AtRisk = 'At Risk',
+  OffTrack = 'Off Track',
+  Completed = 'Completed'
+}
+
+export interface JournalEntry {
+  id: number;
+  date: string; // ISO string
+  entry: string; // HTML content
+}
+
 export interface Goal {
-    id: number;
-    title: string;
-    vision: string; // The "why"
-    targetDate: string; // ISO string
-    linkedProjectId: number | null; // Link to a project for automatic progress
-    imageUrl?: string; // For a vision board feel
+  id: number;
+  title: string;
+  motivation: string; // The "why"
+  targetDate: string; // ISO string
+  createdAt: string; // ISO string
+  completedAt: string | null;
+  status: GoalStatus;
+  progress: number; // Calculated 0-100
+  linkedTaskListIds: number[]; // Can link to multiple task lists
+  journal: JournalEntry[];
 }
 
-export type HabitFrequency = 'daily' | ('mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun')[];
-
+// --- New Habit Tracking Types ---
 export interface Habit {
-    id: number;
-    name: string;
-    frequency: HabitFrequency;
-    linkedGoalId: number | null;
+  id: number;
+  name: string;
+  icon: string; // Icon name from react-icons
+  color: string;
+  frequency: 'daily' | 'weekly';
+  targetDays?: number[]; // for weekly, e.g., [1, 3, 5] for Mon, Wed, Fri (0=Sun, 6=Sat)
+  reminderTime?: string | null; // e.g., "09:00"
+  createdAt: string;
 }
 
 export interface HabitLog {
-    id: number;
-    habitId: number;
-    date: string; // 'YYYY-MM-DD'
-    completed: boolean;
+  id: number;
+  habitId: number;
+  date: string; // YYYY-MM-DD ISO date string (e.g., 2023-10-27)
+}
+
+// --- New Reminder Type ---
+export interface CustomReminder {
+  id: number;
+  title: string;
+  remindAt: string; // ISO string
+  isCompleted: boolean;
+  createdAt: string; // ISO string
+}
+
+// --- New Gamification Types ---
+export interface UserStats {
+  id: number; // Should always be 1 for the single user
+  points: number;
+  currentStreak: number;
+  lastCompletionDate: string | null; // ISO date string
 }
 
 
 export type ActiveSelection = 
   | { type: 'dashboard' }
-  | { type: 'smart-list', id: 'today' | 'next-7-days' }
+  | { type: 'smart-list', id: 'today' }
   | { type: 'list'; id: number }
   | { type: 'tag'; id: string }
   | { type: 'sticky-notes' }
   | { type: 'saved-filter', id: number }
   | { type: 'calendar' }
   | { type: 'ai-chat' }
-  | { type: 'momentum' }
+  | { type: 'goals' }
+  | { type: 'habits' }
+  | { type: 'reminders' }
   | { type: 'settings' }
   | { type: 'ai-task-parser' };
 
@@ -138,6 +178,11 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
+export interface FocusItem {
+  task: Task;
+  subtask?: ChecklistItem;
+}
+
 export interface Comment {
   id: number;
   content: string;
@@ -146,7 +191,7 @@ export interface Comment {
   avatarUrl?: string;
 }
 
-export type ActivityType = 'created' | 'status' | 'priority' | 'comment';
+export type ActivityType = 'created' | 'status' | 'priority' | 'comment' | 'focus';
 
 export interface ActivityLog {
   id: number;
@@ -155,6 +200,8 @@ export interface ActivityLog {
       from?: string; // e.g., 'To Do'
       to?: string; // e.g., 'In Progress'
       commentContent?: string;
+      duration?: number; // for focus sessions, in minutes
+      focusedOn?: string; // description of what was focused on
   };
   taskTitle: string;
   createdAt: string;
@@ -169,6 +216,7 @@ export interface Task {
   status: Status;
   priority: Priority;
   dueDate: string;
+  reminder?: string | null; // Specific reminder date/time
   tags: string[];
   createdAt: string;
   attachments: Attachment[];
@@ -176,6 +224,7 @@ export interface Task {
   comments: Comment[];
   activityLog: ActivityLog[];
   customFields: { [fieldId: number]: any }; // For string, number, date string, optionId, or boolean
+  linkedNoteIds?: number[];
 }
 
 export interface Note {
@@ -192,7 +241,7 @@ export interface Note {
 // --- AI Service Types ---
 export interface Subtask {
   title: string;
-  hours: number;
+  // hours: number; // simplified to just title to be used in checklist
 }
 
 export interface TaskAnalysis {
@@ -207,6 +256,32 @@ export interface NoteAnalysis {
   summary: string;
   tags: string[];
 }
+
+export interface GoalInsight {
+    riskLevel: 'Low' | 'Medium' | 'High';
+    riskReasoning: string;
+    nextActionSuggestion: string;
+}
+
+// --- Briefing & Wind-Down Types ---
+export interface MorningBriefingTask {
+    id: number;
+    title: string;
+    priority: Priority;
+    isGoalRelated: boolean;
+}
+
+export interface MorningBriefing {
+    topPriorities: MorningBriefingTask[];
+    overdueTaskCount: number;
+    motivationalNudge: string;
+}
+
+export interface EveningSummary {
+    celebratoryMessage: string;
+    reflectivePrompt: string;
+}
+
 
 // --- AI Chat Types ---
 

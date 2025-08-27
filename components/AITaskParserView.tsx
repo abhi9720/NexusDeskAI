@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { List, Task } from '../types';
-import { SparklesIcon, CheckIcon } from './icons';
+import { SparklesIcon, CheckIcon, AtomIcon } from './icons';
 import { parseTasksFromText } from '../services/geminiService';
 
 interface AITaskParserViewProps {
@@ -11,6 +11,7 @@ interface AITaskParserViewProps {
 type ParsedTask = {
     title: string;
     description: string;
+    checklist?: string[];
 }
 
 const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
@@ -20,6 +21,8 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
     const [targetListId, setTargetListId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [addedTasksCount, setAddedTasksCount] = useState(0);
 
     useEffect(() => {
         const taskLists = lists.filter(l => l.type === 'task');
@@ -42,7 +45,7 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
         
         const result = await parseTasksFromText(inputText);
         if (result) {
-            setParsedTasks(result);
+            setParsedTasks(result as ParsedTask[]);
             setSelectedTasks(new Set(result.map((_, index) => index)));
         } else {
             setError('Failed to parse tasks. Please check your API key and try again.');
@@ -60,23 +63,41 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
         setSelectedTasks(newSelection);
     };
 
-    const handleAddTasks = () => {
+    const handleAddTasks = async () => {
         if (targetListId === null) {
             alert('Please select a list to add tasks to.');
             return;
         }
-        const tasksAddedCount = selectedTasks.size;
-        selectedTasks.forEach(index => {
-            const task = parsedTasks[index];
-            if (task) {
-                onAddItem(task, targetListId, 'task');
-            }
-        });
+        
+        const tasksToAdd = Array.from(selectedTasks).map(index => parsedTasks[index]).filter(Boolean);
+        if (tasksToAdd.length === 0) return;
 
-        const remainingTasks = parsedTasks.filter((_, index) => !selectedTasks.has(index));
-        setParsedTasks(remainingTasks);
-        setSelectedTasks(new Set());
-        alert(`${tasksAddedCount} task(s) added successfully!`);
+        try {
+            await Promise.all(tasksToAdd.map(task => {
+                const taskPayload: Partial<Task> = {
+                    title: task.title,
+                    description: task.description,
+                    checklist: task.checklist?.map(text => ({
+                        id: Date.now() + Math.random(),
+                        text,
+                        completed: false,
+                    })),
+                };
+                return onAddItem(taskPayload, targetListId, 'task');
+            }));
+            
+            setAddedTasksCount(tasksToAdd.length);
+            setShowSuccessModal(true);
+
+            // Clean up the UI after success
+            const remainingTasks = parsedTasks.filter((_, index) => !selectedTasks.has(index));
+            setParsedTasks(remainingTasks);
+            setSelectedTasks(new Set());
+
+        } catch (err) {
+            console.error("Error adding tasks:", err);
+            setError("An error occurred while adding tasks. Please try again.");
+        }
     };
 
     const taskLists = lists.filter(l => l.type === 'task');
@@ -150,6 +171,12 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
                                     <div>
                                         <p className="font-semibold text-gray-800 dark:text-white">{task.title}</p>
                                         <p className="text-xs text-gray-500 dark:text-gray-400">{task.description}</p>
+                                        {task.checklist && task.checklist.length > 0 && (
+                                            <ul className="mt-2 list-disc list-inside text-xs text-gray-500 dark:text-gray-400">
+                                                {task.checklist.slice(0, 2).map((item, i) => <li key={i}>{item}</li>)}
+                                                {task.checklist.length > 2 && <li>...and {task.checklist.length - 2} more.</li>}
+                                            </ul>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -160,6 +187,23 @@ const AITaskParserView = ({ onAddItem, lists }: AITaskParserViewProps) => {
                     </button>
                 </div>
             </main>
+
+            {showSuccessModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md animate-fade-in-overlay">
+                    <div 
+                        className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-sm m-4 transform transition-all animate-scale-in flex flex-col items-center text-center"
+                    >
+                        <AtomIcon className="w-20 h-20 mb-6" />
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white">{addedTasksCount} task(s) added successfully!</h3>
+                        <button 
+                            onClick={() => setShowSuccessModal(false)} 
+                            className="mt-8 w-full px-10 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

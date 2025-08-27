@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { Note } from '../types';
+import { Note, List } from '../types';
 import NoteModal from './NoteModal';
 import { PlusIcon, TagIcon, PaperClipIcon } from './icons';
 
 interface NotesViewProps {
   notes: Note[];
+  lists: List[];
   onAddNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateNote: (note: Omit<Note, 'updatedAt'>) => void;
   onDeleteNote: (noteId: number) => void;
@@ -46,7 +47,7 @@ const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {
     );
 };
 
-const NotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: NotesViewProps) => {
+const NotesView = ({ notes, lists, onAddNote, onUpdateNote, onDeleteNote }: NotesViewProps) => {
   const [isNoteModalOpen, setIsNoteModalOpen] = React.useState(false);
   const [selectedNote, setSelectedNote] = React.useState<Note | null>(null);
 
@@ -107,6 +108,7 @@ const NotesView = ({ notes, onAddNote, onUpdateNote, onDeleteNote }: NotesViewPr
             onUpdate={onUpdateNote}
             onDelete={onDeleteNote}
             note={selectedNote}
+            lists={lists}
         />
     </div>
   );

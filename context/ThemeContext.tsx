@@ -72,12 +72,12 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
                         ...theme,
                         colors: {
                             primary: colors.primary || '#8b64fd',
-                            brandLight: colors.brandLight || '#F9FAFB',
-                            sidebarLight: colors.sidebarLight || '#F5F5F7',
-                            cardLight: colors.cardLight || '#FFFFFF',
-                            brandDark: colors.brandDark || '#1F2937',
-                            sidebarDark: colors.sidebarDark || '#111827',
-                            cardDark: colors.cardDark || colors.brandDark || '#1F2937' // Fallback to old brandDark for compatibility
+                            pageBackgroundLight: colors.pageBackgroundLight || colors.brandLight || '#F9FAFB',
+                            containerBackgroundLight: colors.containerBackgroundLight || colors.sidebarLight || '#F5F5F7',
+                            cardBackgroundLight: colors.cardBackgroundLight || colors.cardLight || '#FFFFFF',
+                            pageBackgroundDark: colors.pageBackgroundDark || colors.brandDark || '#1F2937',
+                            containerBackgroundDark: colors.containerBackgroundDark || colors.sidebarDark || '#111827',
+                            cardBackgroundDark: colors.cardBackgroundDark || colors.cardDark || '#1F2937'
                         }
                     };
                 });
@@ -106,37 +106,24 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     React.useEffect(() => {
         const root = window.document.documentElement;
 
-        // 1. Apply Mode (light/dark/system)
         const applyMode = () => {
             const isDarkMode = themeMode === 'dark' || 
                                (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            if (isDarkMode) {
-                root.classList.add('dark');
-            } else {
-                root.classList.remove('dark');
-            }
+            root.classList.toggle('dark', isDarkMode);
         };
         
         applyMode();
 
-        // 2. Apply Theme Colors
         const activeTheme = activeThemeId === 'default' 
             ? null 
             : customThemes.find(t => t.id === activeThemeId);
         
-        // Clear previous custom theme vars to fall back to defaults
-        const vars = ['--color-primary', '--color-primary-light', '--color-primary-dark', '--color-brand-light', '--color-sidebar-light', '--color-card-light', '--color-brand-dark', '--color-sidebar-dark', '--color-card-dark'];
+        const vars = ['--color-primary', '--color-primary-light', '--color-primary-dark', '--color-page', '--color-container', '--color-card', '--color-page-dark', '--color-container-dark', '--color-card-dark'];
         vars.forEach(v => root.style.removeProperty(v));
 
         if (activeTheme) {
-            const primaryHsl = hexToHsl(activeTheme.colors.primary);
-            const brandLightHsl = hexToHsl(activeTheme.colors.brandLight);
-            const sidebarLightHsl = hexToHsl(activeTheme.colors.sidebarLight);
-            const cardLightHsl = hexToHsl(activeTheme.colors.cardLight);
-            const brandDarkHsl = hexToHsl(activeTheme.colors.brandDark);
-            const sidebarDarkHsl = hexToHsl(activeTheme.colors.sidebarDark);
-            const cardDarkHsl = hexToHsl(activeTheme.colors.cardDark);
-
+            const { colors } = activeTheme;
+            const primaryHsl = hexToHsl(colors.primary);
             if (primaryHsl) {
                  const primaryLightHsl = adjustHslLightness(primaryHsl, 10);
                  const primaryDarkHsl = adjustHslLightness(primaryHsl, -10);
@@ -144,15 +131,23 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
                  root.style.setProperty('--color-primary-light', `${primaryLightHsl[0]} ${primaryLightHsl[1]}% ${primaryLightHsl[2]}%`);
                  root.style.setProperty('--color-primary-dark', `${primaryDarkHsl[0]} ${primaryDarkHsl[1]}% ${primaryDarkHsl[2]}%`);
             }
-            if (brandLightHsl) root.style.setProperty('--color-brand-light', `${brandLightHsl[0]} ${brandLightHsl[1]}% ${brandLightHsl[2]}%`);
-            if (sidebarLightHsl) root.style.setProperty('--color-sidebar-light', `${sidebarLightHsl[0]} ${sidebarLightHsl[1]}% ${sidebarLightHsl[2]}%`);
-            if (cardLightHsl) root.style.setProperty('--color-card-light', `${cardLightHsl[0]} ${cardLightHsl[1]}% ${cardLightHsl[2]}%`);
-            if (brandDarkHsl) root.style.setProperty('--color-brand-dark', `${brandDarkHsl[0]} ${brandDarkHsl[1]}% ${brandDarkHsl[2]}%`);
-            if (sidebarDarkHsl) root.style.setProperty('--color-sidebar-dark', `${sidebarDarkHsl[0]} ${sidebarDarkHsl[1]}% ${sidebarDarkHsl[2]}%`);
-            if (cardDarkHsl) root.style.setProperty('--color-card-dark', `${cardDarkHsl[0]} ${cardDarkHsl[1]}% ${cardDarkHsl[2]}%`);
+            const colorMap = {
+                '--color-page': colors.pageBackgroundLight,
+                '--color-container': colors.containerBackgroundLight,
+                '--color-card': colors.cardBackgroundLight,
+                '--color-page-dark': colors.pageBackgroundDark,
+                '--color-container-dark': colors.containerBackgroundDark,
+                '--color-card-dark': colors.cardBackgroundDark,
+            };
+
+            for (const [prop, hex] of Object.entries(colorMap)) {
+                const hsl = hexToHsl(hex);
+                if (hsl) {
+                    root.style.setProperty(prop, `${hsl[0]} ${hsl[1]}% ${hsl[2]}%`);
+                }
+            }
         }
 
-        // 3. Listen for system changes
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
         const handleSystemThemeChange = () => {
             if (themeMode === 'system') {
@@ -162,9 +157,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
         mediaQuery.addEventListener('change', handleSystemThemeChange);
         
-        return () => {
-            mediaQuery.removeEventListener('change', handleSystemThemeChange);
-        };
+        return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
     }, [themeMode, activeThemeId, customThemes]);
 
     return (

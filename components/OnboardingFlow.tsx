@@ -60,7 +60,9 @@ const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             case 3:
                 return (
                     <div className="w-full max-w-md text-center animate-fade-in">
-                        <KeyIcon className="w-20 h-20 text-primary mx-auto mb-6" />
+                        <div className="w-28 h-28 mx-auto rounded-full bg-primary flex items-center justify-center mb-8 shadow-2xl shadow-primary/30">
+                           <KeyIcon className="w-14 h-14 text-white" />
+                        </div>
                         <h2 className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">Set up your AI Assistant</h2>
                         <p className="text-gray-600 dark:text-gray-400 mt-3 text-lg">
                            Provide your Gemini API key to enable AI features. This is optional and can be added later in settings.

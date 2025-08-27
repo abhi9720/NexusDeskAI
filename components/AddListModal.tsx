@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { List } from '../types';
 import { XMarkIcon } from './icons';
 
@@ -9,6 +9,8 @@ interface AddListModalProps {
   onUpdateList: (list: List) => void;
   listToEdit?: List | null;
   defaultType?: 'task' | 'note';
+  defaultParentId?: number | null;
+  lists: List[];
 }
 
 const colorOptions = [
@@ -16,11 +18,12 @@ const colorOptions = [
   '#06B6D4', '#3B82F6', '#8b64fd', '#A78BFA', '#EC4899', '#78716C'
 ];
 
-const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, defaultType = 'task' }: AddListModalProps) => {
+const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, defaultType = 'task', defaultParentId = null, lists }: AddListModalProps) => {
   const [name, setName] = useState('');
   const [color, setColor] = useState(colorOptions[8]);
   const [type, setType] = useState<'task' | 'note'>(defaultType);
-  const [defaultView, setDefaultView] = useState<'list' | 'board' | 'calendar'>('list');
+  const [defaultView, setDefaultView] = useState<'list' | 'board' | 'calendar' | 'table'>('list');
+  const [parentId, setParentId] = useState<number | null>(defaultParentId);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,14 +32,30 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, de
             setColor(listToEdit.color);
             setType(listToEdit.type);
             setDefaultView(listToEdit.defaultView || 'list');
+            setParentId(listToEdit.parentId);
         } else {
             setName('');
             setColor(colorOptions[8]);
             setType(defaultType);
             setDefaultView('list');
+            setParentId(defaultParentId);
         }
     }
-  }, [isOpen, listToEdit, defaultType]);
+  }, [isOpen, listToEdit, defaultType, defaultParentId]);
+  
+  const potentialParents = useMemo(() => {
+    const ofType = lists.filter(l => l.type === type);
+    if (!listToEdit) return ofType;
+    
+    const descendantIds = new Set<number>();
+    const findDescendants = (id: number) => {
+        descendantIds.add(id);
+        lists.filter(l => l.parentId === id).forEach(child => findDescendants(child.id));
+    };
+    findDescendants(listToEdit.id);
+    
+    return ofType.filter(l => !descendantIds.has(l.id));
+  }, [lists, type, listToEdit]);
 
 
   if (!isOpen) return null;
@@ -45,17 +64,19 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, de
     e.preventDefault();
     if (!name.trim()) return;
 
+    const finalParentId = type === 'task' ? null : parentId;
+
     if (listToEdit) {
-        onUpdateList({ ...listToEdit, name, color, type, defaultView: type === 'task' ? defaultView : undefined });
+        onUpdateList({ ...listToEdit, name, color, type, parentId: finalParentId, defaultView: type === 'task' ? defaultView : undefined });
     } else {
-        onAddList({ name, color, type, defaultView: type === 'task' ? defaultView : undefined });
+        onAddList({ name, color, type, parentId: finalParentId, defaultView: type === 'task' ? defaultView : undefined });
     }
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-md m-4 transform transition-all animate-fade-in" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-md m-4 transform transition-all animate-scale-in" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{listToEdit ? 'Edit List' : `Add ${type === 'task' ? 'Task' : 'Note'} List`}</h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close">
@@ -75,6 +96,21 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, de
               placeholder="e.g., Project Phoenix"
             />
           </div>
+          {type === 'note' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Parent Folder</label>
+              <select
+                  value={parentId === null ? 'none' : parentId}
+                  onChange={e => setParentId(e.target.value === 'none' ? null : Number(e.target.value))}
+                  className="w-full px-4 py-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary"
+              >
+                  <option value="none">No Parent (Top Level)</option>
+                  {potentialParents.map(parent => (
+                      <option key={parent.id} value={parent.id}>{parent.name}</option>
+                  ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">List Color</label>
             <div className="grid grid-cols-6 gap-2">
@@ -95,12 +131,13 @@ const AddListModal = ({ isOpen, onClose, onAddList, onUpdateList, listToEdit, de
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default View</label>
               <select
                   value={defaultView}
-                  onChange={e => setDefaultView(e.target.value as 'list' | 'board' | 'calendar')}
+                  onChange={e => setDefaultView(e.target.value as 'list' | 'board' | 'calendar' | 'table')}
                   className="w-full px-4 py-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
               >
                   <option value="list">List</option>
                   <option value="board">Board</option>
                   <option value="calendar">Calendar</option>
+                  <option value="table">Table</option>
               </select>
             </div>
           )}

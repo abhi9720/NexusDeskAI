@@ -9,14 +9,14 @@ const newId = () => Date.now() + Math.floor(Math.random() * 1000);
 // Add/Edit Theme Modal (Inlined)
 const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boolean, onClose: () => void, onSave: (theme: CustomTheme) => void, themeToEdit: CustomTheme | null }) => {
     const [name, setName] = useState('');
-    const [colors, setColors] = useState({
+    const [colors, setColors] = useState<CustomTheme['colors']>({
         primary: '#8b64fd',
-        brandLight: '#F9FAFB',
-        sidebarLight: '#F5F5F7',
-        cardLight: '#FFFFFF',
-        brandDark: '#1F2937',
-        sidebarDark: '#111827',
-        cardDark: '#1F2937',
+        pageBackgroundLight: '#F9FAFB',
+        containerBackgroundLight: '#F5F5F7',
+        cardBackgroundLight: '#FFFFFF',
+        pageBackgroundDark: '#1F2937',
+        containerBackgroundDark: '#111827',
+        cardBackgroundDark: '#1F2937',
     });
 
     useEffect(() => {
@@ -27,12 +27,12 @@ const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boole
             setName('');
             setColors({
                 primary: '#8b64fd',
-                brandLight: '#F9FAFB',
-                sidebarLight: '#F5F5F7',
-                cardLight: '#FFFFFF',
-                brandDark: '#1F2937',
-                sidebarDark: '#111827',
-                cardDark: '#1F2937',
+                pageBackgroundLight: '#F9FAFB',
+                containerBackgroundLight: '#F5F5F7',
+                cardBackgroundLight: '#FFFFFF',
+                pageBackgroundDark: '#1F2937',
+                containerBackgroundDark: '#111827',
+                cardBackgroundDark: '#1F2937',
             });
         }
     }, [themeToEdit]);
@@ -45,11 +45,11 @@ const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boole
         onClose();
     };
 
-    const handleColorChange = (field: keyof typeof colors, value: string) => {
+    const handleColorChange = (field: keyof CustomTheme['colors'], value: string) => {
         setColors(prev => ({ ...prev, [field]: value }));
     };
 
-    const colorFields: (keyof typeof colors)[] = ['primary', 'brandLight', 'sidebarLight', 'cardLight', 'brandDark', 'sidebarDark', 'cardDark'];
+    const colorFields: (keyof CustomTheme['colors'])[] = ['primary', 'pageBackgroundLight', 'containerBackgroundLight', 'cardBackgroundLight', 'pageBackgroundDark', 'containerBackgroundDark', 'cardBackgroundDark'];
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center backdrop-blur-sm" onClick={onClose}>
@@ -60,7 +60,7 @@ const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boole
                     {colorFields.map((key) => (
                         <div key={key} className="flex items-center justify-between">
                             <label className="capitalize text-sm">{key.replace(/([A-Z])/g, ' $1')}</label>
-                            <input type="color" value={colors[key]} onChange={e => handleColorChange(key as any, e.target.value)} className="w-16 h-8 p-0 border-none rounded-md" />
+                            <input type="color" value={colors[key]} onChange={e => handleColorChange(key, e.target.value)} className="w-16 h-8 p-0 border-none rounded-md" />
                         </div>
                     ))}
                 </div>
@@ -77,7 +77,7 @@ const AddThemeModal = ({ isOpen, onClose, onSave, themeToEdit }: { isOpen: boole
 const AddCustomFieldModal = ({ isOpen, onClose, onSave, fieldToEdit, lists }: { isOpen: boolean, onClose: () => void, onSave: (field: CustomFieldDefinition) => void, fieldToEdit: CustomFieldDefinition | null, lists: List[] }) => {
     const [name, setName] = useState('');
     const [type, setType] = useState<CustomFieldType>('text');
-    const [listId, setListId] = useState<number | null>(null); 
+    const [listId, setListId] = useState<number | null>(null);
     const [options, setOptions] = useState<CustomFieldOption[]>([]);
     const [newOption, setNewOption] = useState('');
     
@@ -217,11 +217,11 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
     const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
     const [fieldToEdit, setFieldToEdit] = useState<CustomFieldDefinition | null>(null);
     
-    const predefinedThemes = [
-        { name: 'Forest', colors: { primary: '#22C55E', brandLight: '#F0FDF4', sidebarLight: '#EBF7F0', cardLight: '#FFFFFF', brandDark: '#14532D', sidebarDark: '#052E16', cardDark: '#1E402D' } },
-        { name: 'Ocean', colors: { primary: '#06B6D4', brandLight: '#ECFEFF', sidebarLight: '#E0FCFF', cardLight: '#FFFFFF', brandDark: '#164E63', sidebarDark: '#083344', cardDark: '#1E495A' } },
-        { name: 'Rose', colors: { primary: '#F472B6', brandLight: '#FFF1F2', sidebarLight: '#FFE4E6', cardLight: '#FFFFFF', brandDark: '#831843', sidebarDark: '#500724', cardDark: '#7A1C43' } },
-        { name: 'Twilight', colors: { primary: '#4B49AC', brandLight: '#F4F6FC', sidebarLight: '#E8EBF5', cardLight: '#FFFFFF', brandDark: '#191B28', sidebarDark: '#11131E', cardDark: '#191B28' } },
+    const predefinedThemes: { name: string, colors: CustomTheme['colors'] }[] = [
+        { name: 'Forest', colors: { primary: '#22C55E', pageBackgroundLight: '#F0FDF4', containerBackgroundLight: '#EBF7F0', cardBackgroundLight: '#FFFFFF', pageBackgroundDark: '#14532D', containerBackgroundDark: '#052E16', cardBackgroundDark: '#1E402D' } },
+        { name: 'Ocean', colors: { primary: '#06B6D4', pageBackgroundLight: '#ECFEFF', containerBackgroundLight: '#E0FCFF', cardBackgroundLight: '#FFFFFF', pageBackgroundDark: '#164E63', containerBackgroundDark: '#083344', cardBackgroundDark: '#1E495A' } },
+        { name: 'Rose', colors: { primary: '#F472B6', pageBackgroundLight: '#FFF1F2', containerBackgroundLight: '#FFE4E6', cardBackgroundLight: '#FFFFFF', pageBackgroundDark: '#831843', containerBackgroundDark: '#500724', cardBackgroundDark: '#7A1C43' } },
+        { name: 'Twilight', colors: { primary: '#4B49AC', pageBackgroundLight: '#F4F6FC', containerBackgroundLight: '#E8EBF5', cardBackgroundLight: '#FFFFFF', pageBackgroundDark: '#191B28', containerBackgroundDark: '#11131E', cardBackgroundDark: '#191B28' } },
     ];
 
     const handleSave = (type: 'user' | 'api') => {
@@ -251,7 +251,7 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
         }
     };
     
-    const handleOpenThemeModalFromTemplate = (template: { name: string, colors: any }) => {
+    const handleOpenThemeModalFromTemplate = (template: { name: string, colors: CustomTheme['colors'] }) => {
         const newThemeTemplate: CustomTheme = {
             id: '', 
             name: template.name,
@@ -281,7 +281,7 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
     ];
 
     return (
-        <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-brand-light dark:bg-brand-dark flex flex-col">
+        <div className="p-4 md:p-8 flex-1 overflow-y-auto bg-brand-light dark:bg-brand-dark flex flex-col">
             <header className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Settings</h1>
             </header>
@@ -290,9 +290,9 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
                     <SettingCard title="Profile" icon={<UserCircleIcon className="w-6 h-6 text-primary" />}>
                          <div>
                             <label htmlFor="userName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your Name</label>
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                                 <input type="text" id="userName" value={nameInput} onChange={e => setNameInput(e.target.value)} className="flex-grow px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary" />
-                                <button onClick={() => handleSave('user')} className="px-5 py-2 text-sm bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors">
+                                <button onClick={() => handleSave('user')} className="px-5 py-2 text-sm bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors w-full sm:w-auto flex-shrink-0">
                                     Save
                                 </button>
                             </div>
@@ -304,9 +304,9 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
                          <div>
                             <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gemini API Key</label>
                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Your key is stored locally and securely on your machine.</p>
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                                 <input type="password" id="apiKey" value={keyInput} onChange={e => setKeyInput(e.target.value)} className="flex-grow px-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary" placeholder="Enter your key here"/>
-                                <button onClick={() => handleSave('api')} className="px-5 py-2 text-sm bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors">
+                                <button onClick={() => handleSave('api')} className="px-5 py-2 text-sm bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors w-full sm:w-auto flex-shrink-0">
                                     Save
                                 </button>
                             </div>
@@ -319,7 +319,7 @@ const SettingsView = ({ userName, apiKey, onUpdateUser, onUpdateApiKey, customFi
                      <SettingCard title="Appearance" icon={<PaletteIcon className="w-6 h-6 text-primary" />}>
                         <div>
                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mode</label>
-                            <div className="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
                                 {themeModeOptions.map(option => (
                                     <button
                                         key={option.value}

@@ -83,7 +83,7 @@ const ActivityItem = ({ icon, text, time }: { icon: React.ReactNode; text: React
 );
 
 
-const ProjectOverview = ({ tasks, list }: { tasks: Task[], list?: List }) => {
+const ListOverview = ({ tasks, list }: { tasks: Task[], list?: List }) => {
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.status === Status.Done).length;
     const inProgressTasks = tasks.filter(t => t.status === Status.InProgress).length;
@@ -146,8 +146,8 @@ const ProjectOverview = ({ tasks, list }: { tasks: Task[], list?: List }) => {
                  <div className="flex items-center gap-4">
                     <CircularProgress percentage={completionPercentage} />
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{list ? list.name : 'Project'} Overview</h2>
-                        <p className="text-gray-500 dark:text-gray-400">Here's a snapshot of your project's progress.</p>
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{list ? list.name : 'List'} Overview</h2>
+                        <p className="text-gray-500 dark:text-gray-400">Here's a snapshot of your list's progress.</p>
                     </div>
                 </div>
             </div>
@@ -188,4 +188,4 @@ const ProjectOverview = ({ tasks, list }: { tasks: Task[], list?: List }) => {
     );
 };
 
-export default ProjectOverview;
+export default ListOverview;

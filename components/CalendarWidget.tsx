@@ -2,14 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { Task } from '../types';
 import {
   format,
-  startOfWeek,
   eachDayOfInterval,
   addWeeks,
-  subWeeks,
   isSameDay,
   isToday,
   addDays,
 } from 'date-fns';
+import startOfWeek from 'date-fns/startOfWeek';
+import subWeeks from 'date-fns/subWeeks';
 import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisHorizontalIcon, VideoIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon } from './icons';
 
 interface CalendarWidgetProps {
@@ -77,19 +77,26 @@ const CalendarWidget = ({ tasks, onTaskClick }: CalendarWidgetProps) => {
     return eachDayOfInterval({ start: start, end: addDays(start, 6) });
   }, [currentDate]);
 
-  const selectedDayTasks = useMemo(() => {
-    return tasks.filter(task => {
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    tasks.forEach(task => {
         try {
-            return isSameDay(new Date(task.dueDate), selectedDate);
-        } catch (e) {
-            return false;
-        }
-    }).sort((a,b) => { // Sort by priority
+            const dayKey = format(new Date(task.dueDate), 'yyyy-MM-dd');
+            if (!map.has(dayKey)) map.set(dayKey, []);
+            map.get(dayKey)?.push(task);
+        } catch {}
+    });
+    return map;
+  }, [tasks]);
+
+  const selectedDayTasks = useMemo(() => {
+    const dayKey = format(selectedDate, 'yyyy-MM-dd');
+    const tasksForDay = tasksByDay.get(dayKey) || [];
+    return tasksForDay.sort((a,b) => { // Sort by priority
         const priorityOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
-        // @ts-ignore
         return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
-  }, [tasks, selectedDate]);
+  }, [tasksByDay, selectedDate]);
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = direction === 'prev' ? subWeeks(currentDate, 1) : addWeeks(currentDate, 1);
@@ -120,25 +127,30 @@ const CalendarWidget = ({ tasks, onTaskClick }: CalendarWidgetProps) => {
       </header>
 
       <div className="flex justify-between items-center space-x-1 sm:space-x-2 mb-6">
-        {weekDays.map(day => (
-          <button
-            key={day.toISOString()}
-            onClick={() => handleSelectDate(day)}
-            className={`w-full flex flex-col items-center py-2 px-1 rounded-lg transition-all duration-200
-              ${isSameDay(day, selectedDate)
-                ? 'bg-primary text-white shadow-lg transform scale-105'
-                : 'hover:bg-primary/10 dark:hover:bg-primary/20'
-              }
-              ${isToday(day) && !isSameDay(day, selectedDate)
-                ? 'text-primary dark:text-primary-light'
-                : ''
-              }
-            `}
-          >
-            <span className="text-xs opacity-80">{format(day, 'E')}</span>
-            <span className="font-semibold text-lg mt-1">{format(day, 'd')}</span>
-          </button>
-        ))}
+        {weekDays.map(day => {
+            const dayKey = format(day, 'yyyy-MM-dd');
+            const hasTasks = tasksByDay.has(dayKey);
+          return (
+            <button
+                key={day.toISOString()}
+                onClick={() => handleSelectDate(day)}
+                className={`w-full flex flex-col items-center py-2 px-1 rounded-lg transition-all duration-200 relative
+                ${isSameDay(day, selectedDate)
+                    ? 'bg-primary text-white shadow-lg transform scale-105'
+                    : 'hover:bg-primary/10 dark:hover:bg-primary/20'
+                }
+                ${isToday(day) && !isSameDay(day, selectedDate)
+                    ? 'text-primary dark:text-primary-light'
+                    : ''
+                }
+                `}
+            >
+                <span className="text-xs opacity-80">{format(day, 'E')}</span>
+                <span className="font-semibold text-lg mt-1">{format(day, 'd')}</span>
+                {hasTasks && <div className={`absolute bottom-1 h-1 w-1 rounded-full ${isSameDay(day, selectedDate) ? 'bg-white' : 'bg-primary'}`}></div>}
+            </button>
+          )
+        })}
       </div>
 
       <div className="space-y-3 min-h-[150px] max-h-[300px] overflow-y-auto pr-2 -mr-2">

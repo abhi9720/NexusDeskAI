@@ -1,6 +1,6 @@
 import React from 'react';
-import { Note } from '../types';
-import { TagIcon, PaperClipIcon } from './icons';
+import { Note, List } from '../types';
+import { TagIcon, PaperClipIcon, FolderIcon } from './icons';
 
 
 const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {
@@ -39,25 +39,50 @@ const NoteCard = ({ note, onClick }: { note: Note; onClick: () => void }) => {
     );
 };
 
+const FolderCard = ({ list, onClick }: { list: List & { itemCount: number }; onClick: (id: number) => void }) => {
+    return (
+        <div
+            onClick={() => onClick(list.id)}
+            className="p-5 bg-card-light dark:bg-card-dark rounded-lg shadow-md cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between border-l-4"
+            style={{ borderLeftColor: list.color }}
+            role="button"
+            aria-label={`Open folder: ${list.name}`}
+        >
+            <div className="flex items-center gap-4">
+                 <span style={{ color: list.color }}><FolderIcon className="w-8 h-8 flex-shrink-0" /></span>
+                 <div className="flex-grow min-w-0">
+                    <h4 className="font-semibold text-lg text-gray-800 dark:text-white truncate">{list.name}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{list.itemCount} items</p>
+                 </div>
+            </div>
+        </div>
+    );
+};
+
 
 interface NoteListViewProps {
     notes: Note[];
+    subfolders: (List & { itemCount: number })[];
     onSelectNote: (note: Note) => void;
+    onSelectFolder: (listId: number) => void;
 }
 
-const NoteListView = ({ notes, onSelectNote }: NoteListViewProps) => {
+const NoteListView = ({ notes, subfolders, onSelectNote, onSelectFolder }: NoteListViewProps) => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {subfolders.map(folder => (
+                <FolderCard key={`folder-${folder.id}`} list={folder} onClick={onSelectFolder} />
+            ))}
             {notes.map(note => (
                 <NoteCard key={note.id} note={note} onClick={() => onSelectNote(note)} />
             ))}
         </div>
         
-        {notes.length === 0 && (
+        {(notes.length === 0 && subfolders.length === 0) && (
             <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-                <p>No notes in this list.</p>
+                <p>This folder is empty.</p>
             </div>
         )}
     </div>

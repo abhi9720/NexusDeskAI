@@ -12,7 +12,7 @@ interface AddTaskModalProps {
 const newId = () => Date.now() + Math.floor(Math.random() * 1000);
 
 const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, onRemove: (id: number) => void }) => {
-    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `file://${attachment.url}`;
+    const srcUrl = attachment.url.startsWith('data:') ? attachment.url : `safe-file://${attachment.url}`;
     const renderPreview = () => {
         if (attachment.type.startsWith('image/')) {
             return <img src={srcUrl} alt={attachment.name} className="max-h-24 rounded-md object-contain"/>;
@@ -67,24 +67,27 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
-      if (!files) return;
+      if (!files || files.length === 0) return;
       const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 
-      for (const file of Array.from(files)) {
+      const attachmentPromises = Array.from(files).map(async file => {
           if (file.size > MAX_FILE_SIZE) {
               alert(`File "${file.name}" is too large. Maximum size is 15MB.`);
-              continue;
+              return null;
           }
-          
           const savedPathOrDataUrl = await fileService.saveAttachment(file);
-          
-          const newAttachment: Attachment = {
+          return {
               id: newId(),
               name: file.name,
               type: file.type,
               url: savedPathOrDataUrl,
           };
-          setAttachments(prev => [...prev, newAttachment]);
+      });
+
+      const newAttachments = (await Promise.all(attachmentPromises)).filter((att): att is Attachment => att !== null);
+      
+      if (newAttachments.length > 0) {
+          setAttachments(prev => [...prev, ...newAttachments]);
       }
   };
   
@@ -150,8 +153,8 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="bg-brand-light dark:bg-brand-dark rounded-2xl shadow-2xl p-8 w-full max-w-lg m-4 transform transition-all animate-fade-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center backdrop-blur-md" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="bg-page dark:bg-page-dark rounded-2xl shadow-2xl p-8 w-full max-w-lg m-4 transform transition-all animate-scale-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Add New Task</h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close">
@@ -177,7 +180,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
               id="description"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={4}
+              rows={3}
               className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
               placeholder="Add more details about the task..."
             />

@@ -3,20 +3,20 @@ import { Task } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
 import {
   format,
-  startOfWeek,
   endOfWeek,
   eachDayOfInterval,
   addWeeks,
-  subWeeks,
   isSameDay,
   isToday,
   isSameMonth,
-  startOfMonth,
   endOfMonth,
   addMonths,
-  subMonths,
   addDays,
 } from 'date-fns';
+import startOfWeek from 'date-fns/startOfWeek';
+import subWeeks from 'date-fns/subWeeks';
+import startOfMonth from 'date-fns/startOfMonth';
+import subMonths from 'date-fns/subMonths';
 
 interface TaskCalendarViewProps {
   tasks: Task[];

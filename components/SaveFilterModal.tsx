@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { XMarkIcon } from './icons';
 
@@ -22,8 +20,8 @@ const SaveFilterModal = ({ isOpen, onClose, onSave }: SaveFilterModalProps) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-sm m-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center backdrop-blur-md" onClick={onClose}>
+            <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-sm m-4 animate-scale-in" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold text-gray-800 dark:text-white">Save Filter</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close">

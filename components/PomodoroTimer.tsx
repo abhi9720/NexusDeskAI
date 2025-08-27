@@ -1,44 +1,61 @@
 import * as React from 'react';
 import { ClockIcon } from './icons';
+import { notificationService } from '../services/notificationService';
 
-const PomodoroTimer = () => {
-    const [duration, setDuration] = React.useState(25 * 60); // Default 25 minutes
-    const [time, setTime] = React.useState(duration);
+const CircularProgress = ({ percentage, time }: { percentage: number; time: string }) => {
+    const radius = 90;
+    const strokeWidth = 12;
+    const innerRadius = radius - strokeWidth / 2;
+    const circumference = 2 * Math.PI * innerRadius;
+    const offset = circumference - (percentage / 100) * circumference;
+
+    return (
+        <div className="relative w-56 h-56">
+            <svg className="w-full h-full" viewBox="0 0 200 200">
+                <circle
+                    className="text-gray-200/70 dark:text-gray-700/50"
+                    strokeWidth={strokeWidth}
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={innerRadius}
+                    cx="100"
+                    cy="100"
+                />
+                <circle
+                    className="text-primary"
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={innerRadius}
+                    cx="100"
+                    cy="100"
+                    transform="rotate(-90 100 100)"
+                    style={{ transition: 'stroke-dashoffset 0.3s linear' }}
+                />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+                 <span className="text-5xl font-bold text-gray-900 dark:text-white tracking-wider font-mono">
+                    {time}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+interface PomodoroTimerProps {
+    onComplete?: (durationMinutes: number) => void;
+}
+
+const PomodoroTimer = ({ onComplete }: PomodoroTimerProps) => {
+    const [durationMinutes, setDurationMinutes] = React.useState(25);
+    const [time, setTime] = React.useState(25 * 60);
     const [isActive, setIsActive] = React.useState(false);
-    const [customMinutes, setCustomMinutes] = React.useState('25');
 
-    const quickPicks = [
-        { label: '15 min', value: 15 },
-        { label: '25 min', value: 25 },
-        { label: '45 min', value: 45 },
-    ];
+    const duration = durationMinutes * 60;
 
-    // Update time when duration changes, but only if timer isn't running
-    React.useEffect(() => {
-        if (!isActive) {
-            setTime(duration);
-            setCustomMinutes(String(duration / 60));
-        }
-    }, [duration]);
-
-    const handleSetDuration = (minutes: number) => {
-        if (minutes > 0) {
-            setDuration(minutes * 60);
-            setIsActive(false); // Reset active state on new duration
-        }
-    };
-
-    const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
-        if (/^\d*$/.test(val)) { // only allow digits
-            setCustomMinutes(val);
-            const minutes = parseInt(val, 10);
-            if (!isNaN(minutes) && minutes > 0) {
-                handleSetDuration(minutes);
-            }
-        }
-    };
-    
     React.useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
         if (isActive && time > 0) {
@@ -46,20 +63,30 @@ const PomodoroTimer = () => {
                 setTime(t => t - 1);
             }, 1000);
         } else if (isActive && time === 0) {
-            new Notification('Pomodoro Finished!', { body: 'Time for a short break.' });
+            if (onComplete) {
+                onComplete(durationMinutes);
+            } else {
+                notificationService.send('Pomodoro Finished!', { body: 'Time for a short break.' });
+            }
             setIsActive(false);
+            setTime(duration);
         }
         
         return () => {
             if (interval) clearInterval(interval);
         };
-    }, [isActive, time]);
+    }, [isActive, time, duration, onComplete, durationMinutes]);
     
     React.useEffect(() => {
-        if (Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
+        notificationService.requestPermission();
     }, []);
+
+    const handleDurationChange = (minutes: number) => {
+        if (isActive) setIsActive(false);
+        const newMinutes = Math.max(1, minutes); // min 1 minute
+        setDurationMinutes(newMinutes);
+        setTime(newMinutes * 60);
+    };
 
     const toggleTimer = () => {
         if (time === 0) {
@@ -80,58 +107,50 @@ const PomodoroTimer = () => {
     };
 
     return (
-        <div className="p-6 rounded-2xl bg-card-light/50 dark:bg-card-dark/20 backdrop-blur-sm border border-white/20 dark:border-black/20 shadow-lg animate-fade-in">
-            <div className="flex items-center space-x-3">
+        <div className="p-6 rounded-2xl bg-card-light/60 dark:bg-card-dark/60 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/50 shadow-lg animate-fade-in flex flex-col items-center">
+            <div className="flex items-center space-x-3 mb-6">
                 <ClockIcon className="w-6 h-6 text-primary" />
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Pomodoro Timer</h3>
             </div>
-            
-            {!isActive && (
-                <div className="my-6 space-y-4 transition-all duration-300 animate-fade-in">
-                    <div className="flex justify-center gap-2">
-                        {quickPicks.map(pick => (
-                            <button
-                                key={pick.value}
-                                onClick={() => handleSetDuration(pick.value)}
-                                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
-                                    duration === pick.value * 60
-                                        ? 'bg-primary text-white shadow-sm'
-                                        : 'bg-gray-200 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                                }`}
-                            >
-                                {pick.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center justify-center gap-2 text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Custom:</span>
-                        <input
-                            type="text"
-                            value={customMinutes}
-                            onChange={handleCustomChange}
-                            aria-label="Custom minutes"
-                            className="w-16 px-2 py-1 text-center rounded-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-primary"
-                        />
-                         <span className="text-gray-600 dark:text-gray-400">min</span>
-                    </div>
-                </div>
-            )}
 
-            <div className="text-center my-6">
-                <p className="text-6xl font-bold text-gray-900 dark:text-white tracking-wider">
-                    {formatTime(time)}
-                </p>
+            <CircularProgress percentage={(time / duration) * 100} time={formatTime(time)} />
+            
+            <div className="my-6 space-y-4 w-full text-center">
+                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Set Duration (minutes)</label>
+                <div className="flex justify-center items-center gap-2 mt-2">
+                    {[15, 25, 45].map(minutes => (
+                         <button
+                            key={minutes}
+                            onClick={() => handleDurationChange(minutes)}
+                            className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
+                                durationMinutes === minutes && !isActive
+                                    ? 'bg-primary text-white shadow-sm'
+                                    : 'bg-gray-200 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                            }`}
+                        >
+                            {minutes}
+                        </button>
+                    ))}
+                     <input
+                        type="number"
+                        value={durationMinutes}
+                        onChange={(e) => handleDurationChange(parseInt(e.target.value, 10))}
+                        className="w-16 p-1.5 text-center text-sm font-semibold rounded-lg bg-gray-200 dark:bg-gray-700/50 border-transparent focus:ring-2 focus:ring-primary focus:border-transparent"
+                        min="1"
+                    />
+                </div>
             </div>
+            
             <div className="flex justify-center space-x-4">
                 <button
                     onClick={toggleTimer}
-                    className={`px-6 py-2 rounded-lg font-semibold text-white transition-transform transform hover:scale-105 ${isActive ? 'bg-accent hover:bg-pink-600' : 'bg-primary hover:bg-primary-dark'}`}
+                    className={`px-10 py-3 text-base rounded-lg font-semibold text-white transition-transform transform hover:scale-105 ${isActive ? 'bg-accent hover:bg-pink-600' : 'bg-primary hover:bg-primary-dark'}`}
                 >
                     {isActive ? 'Pause' : (time > 0 && time < duration) ? 'Resume' : 'Start'}
                 </button>
                 <button
                     onClick={resetTimer}
-                    className="px-6 py-2 rounded-lg font-semibold text-gray-700 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition-transform transform hover:scale-105"
+                    className="px-8 py-3 text-base rounded-lg font-semibold text-gray-700 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition-transform transform hover:scale-105"
                 >
                     Reset
                 </button>

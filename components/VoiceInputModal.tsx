@@ -10,6 +10,7 @@ interface VoiceInputModalProps {
 const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) => {
     const [transcript, setTranscript] = useState('');
     const [isListening, setIsListening] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -28,7 +29,7 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
         streamRef.current?.getTracks().forEach(track => track.stop());
         sourceRef.current?.disconnect();
         if (audioContextRef.current?.state !== 'closed') {
-           audioContextRef.current?.close();
+           audioContextRef.current?.close().catch(e => console.error("Error closing AudioContext:", e));
         }
 
         streamRef.current = null;
@@ -53,8 +54,7 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
             analyser.getByteTimeDomainData(dataArray);
 
             if (canvasCtx) {
-                canvasCtx.fillStyle = 'transparent';
-                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
                 canvasCtx.lineWidth = 2;
                 canvasCtx.strokeStyle = 'hsl(var(--color-primary))';
                 canvasCtx.beginPath();
@@ -83,7 +83,7 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
     const startListening = async () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-            console.error("Speech recognition not supported.");
+            setError("Speech recognition is not supported by your browser.");
             return;
         }
 
@@ -110,7 +110,16 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
         recognition.onstart = () => setIsListening(true);
         recognition.onend = () => setIsListening(false);
         recognition.onerror = (event: any) => {
-            console.error("Speech recognition error:", event.error)
+            console.error("Speech recognition error:", event.error);
+            if (event.error === 'network') {
+                setError("Network error. Please check your internet connection and try again.");
+            } else if (event.error === 'no-speech') {
+                setError("No speech was detected. Please try again.");
+            } else if (event.error === 'audio-capture') {
+                setError("Microphone error. Please ensure it's connected and permissions are granted.");
+            } else {
+                setError("An unknown error occurred during speech recognition.");
+            }
             setIsListening(false);
         };
         
@@ -132,20 +141,21 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
 
         } catch (err) {
             console.error("Error accessing microphone:", err);
-            onClose();
+            setError("Could not access the microphone. Please grant permission and try again.");
         }
     };
     
     useEffect(() => {
         if (isOpen) {
+            setTranscript('');
+            setError(null);
             startListening();
         } else {
             stopListeningAndCleanup();
         }
         return () => {
-             if (isListening) {
-                stopListeningAndCleanup();
-             }
+             // Safety net cleanup when component unmounts
+             stopListeningAndCleanup();
         };
     }, [isOpen]);
 
@@ -153,11 +163,24 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
         onComplete(transcript.trim());
     };
 
+    const getStatusText = () => {
+        if (error) {
+            return <span className="text-red-500">{error}</span>;
+        }
+        if (isListening && !transcript) {
+            return 'Listening...';
+        }
+        if (transcript) {
+            return transcript;
+        }
+        return 'Please speak into your microphone.';
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black/70 z-50 flex flex-col justify-center items-center backdrop-blur-md animate-fade-in-overlay" onMouseDown={onClose}>
-            <div className="bg-brand-light dark:bg-brand-dark rounded-2xl w-full max-w-2xl p-8 flex flex-col items-center gap-8 relative animate-fade-in" onMouseDown={e => e.stopPropagation()}>
+            <div className="bg-page dark:bg-page-dark rounded-2xl w-full max-w-2xl p-8 flex flex-col items-center gap-8 relative animate-scale-in" onMouseDown={e => e.stopPropagation()}>
                 <button onMouseDown={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
                     <XMarkIcon className="w-6 h-6" />
                 </button>
@@ -169,13 +192,13 @@ const VoiceInputModal = ({ isOpen, onClose, onComplete }: VoiceInputModalProps) 
                     <canvas ref={canvasRef} width="600" height="100" className="w-full h-full"></canvas>
                 </div>
 
-                <p className="min-h-[56px] text-xl text-center text-gray-800 dark:text-gray-100">{transcript || 'Listening...'}</p>
+                <p className="min-h-[56px] text-xl text-center text-gray-800 dark:text-gray-100">{getStatusText()}</p>
 
                 <div className="flex items-center gap-4">
                     <button onMouseDown={onClose} className="px-6 py-3 text-sm font-semibold rounded-lg bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500">
                         Cancel
                     </button>
-                    <button onMouseDown={handleComplete} disabled={!transcript.trim()} className="px-6 py-3 text-sm font-semibold rounded-lg bg-primary text-white hover:bg-primary-dark disabled:opacity-50">
+                    <button onMouseDown={handleComplete} disabled={!transcript.trim() || !!error} className="px-6 py-3 text-sm font-semibold rounded-lg bg-primary text-white hover:bg-primary-dark disabled:opacity-50">
                         Insert Text
                     </button>
                 </div>
