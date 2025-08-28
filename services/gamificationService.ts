@@ -32,6 +32,28 @@ const processCompletion = (currentStats: UserStats, pointsToAdd: number): UserSt
     };
 };
 
+const reverseCompletion = (currentStats: UserStats, pointsToSubtract: number, hasOtherCompletionsToday: boolean): UserStats => {
+    const newPoints = Math.max(0, currentStats.points - pointsToSubtract);
+    const lastCompletion = currentStats.lastCompletionDate ? new Date(currentStats.lastCompletionDate) : null;
+
+    // If there are other completions today, or if the last completion wasn't today, only points are affected.
+    if (hasOtherCompletionsToday || !lastCompletion || !isToday(lastCompletion)) {
+        return {
+            ...currentStats,
+            points: newPoints,
+        };
+    }
+    
+    // This was the last completion for today. Reset streak-related fields.
+    // This is a simplification; a perfect revert isn't possible without historical data.
+    return {
+        ...currentStats,
+        points: newPoints,
+        currentStreak: 0,
+        lastCompletionDate: null,
+    };
+};
+
 
 export const gamificationService = {
     processTaskCompletion(currentStats: UserStats): UserStats {
@@ -40,5 +62,13 @@ export const gamificationService = {
 
     processHabitCompletion(currentStats: UserStats): UserStats {
         return processCompletion(currentStats, POINTS_PER_HABIT);
+    },
+
+    reverseTaskCompletion(currentStats: UserStats, hasOtherCompletionsToday: boolean): UserStats {
+        return reverseCompletion(currentStats, POINTS_PER_TASK, hasOtherCompletionsToday);
+    },
+
+    reverseHabitCompletion(currentStats: UserStats, hasOtherCompletionsToday: boolean): UserStats {
+        return reverseCompletion(currentStats, POINTS_PER_HABIT, hasOtherCompletionsToday);
     }
 };

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Habit } from '../types';
+import { Habit, HabitType, HabitFrequency } from '../types';
 import { XMarkIcon } from './icons';
 import * as Hi2 from 'react-icons/hi2';
 
@@ -14,7 +14,7 @@ const colors = [
   '#06B6D4', '#3B82F6', '#8b64fd', '#A78BFA', '#EC4899', '#78716C'
 ];
 
-const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 
 interface AddHabitModalProps {
@@ -28,8 +28,12 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit }: AddHabitModalPr
     const [name, setName] = React.useState('');
     const [icon, setIcon] = React.useState(icons[0]);
     const [color, setColor] = React.useState(colors[8]);
-    const [frequency, setFrequency] = React.useState<'daily' | 'weekly'>('daily');
+    const [type, setType] = React.useState<HabitType>('binary');
+    const [goalValue, setGoalValue] = React.useState<number | undefined>(undefined);
+    const [goalUnit, setGoalUnit] = React.useState('');
+    const [frequency, setFrequency] = React.useState<HabitFrequency>('daily');
     const [targetDays, setTargetDays] = React.useState<number[]>([]);
+    const [frequencyValue, setFrequencyValue] = React.useState<number | undefined>(3);
     const [reminderTime, setReminderTime] = React.useState('');
 
     React.useEffect(() => {
@@ -38,15 +42,24 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit }: AddHabitModalPr
                 setName(habitToEdit.name);
                 setIcon(habitToEdit.icon);
                 setColor(habitToEdit.color);
+                setType(habitToEdit.type);
+                setGoalValue(habitToEdit.goalValue);
+                setGoalUnit(habitToEdit.goalUnit || '');
                 setFrequency(habitToEdit.frequency);
                 setTargetDays(habitToEdit.targetDays || []);
+                setFrequencyValue(habitToEdit.frequencyValue);
                 setReminderTime(habitToEdit.reminderTime || '');
             } else {
+                // Reset to defaults
                 setName('');
                 setIcon(icons[0]);
                 setColor(colors[8]);
+                setType('binary');
+                setGoalValue(undefined);
+                setGoalUnit('');
                 setFrequency('daily');
                 setTargetDays([]);
+                setFrequencyValue(3);
                 setReminderTime('');
             }
         }
@@ -66,16 +79,25 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit }: AddHabitModalPr
         e.preventDefault();
         if (!name.trim()) return;
 
-        const habitData = {
-            id: habitToEdit?.id,
+        const habitPayload: Omit<Habit, 'id' | 'createdAt'> & { id?: number } = {
             name,
             icon,
             color,
+            type,
+            goalValue: type === 'quantitative' ? (goalValue || 0) : undefined,
+            goalUnit: type === 'quantitative' ? goalUnit : undefined,
             frequency,
             targetDays: frequency === 'weekly' ? targetDays : undefined,
+            frequencyValue: frequency === 'x_times_per_week' ? (frequencyValue || 1) : undefined,
             reminderTime: reminderTime || null,
+            isArchived: habitToEdit?.isArchived || false,
         };
-        onSave(habitData as any);
+        
+        if (habitToEdit) {
+            habitPayload.id = habitToEdit.id;
+        }
+
+        onSave(habitPayload);
         onClose();
     };
 
@@ -83,7 +105,7 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit }: AddHabitModalPr
 
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md" onClick={onClose}>
-            <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-6 w-full max-w-lg m-4 transform transition-all animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-6 w-full max-w-lg m-4 transform transition-all animate-scale-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <form onSubmit={handleSubmit}>
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold">{habitToEdit ? 'Edit Habit' : 'Create New Habit'}</h2>
@@ -115,17 +137,38 @@ const AddHabitModal = ({ isOpen, onClose, onSave, habitToEdit }: AddHabitModalPr
                         </div>
 
                         <div>
+                            <label className="block text-sm font-medium mb-2">Habit Type</label>
+                            <div className="flex gap-2 p-1 rounded-lg bg-gray-200 dark:bg-gray-700">
+                                <button type="button" onClick={() => setType('binary')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${type === 'binary' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Yes / No</button>
+                                <button type="button" onClick={() => setType('quantitative')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${type === 'quantitative' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Quantitative</button>
+                            </div>
+                            {type === 'quantitative' && (
+                                <div className="mt-2 flex gap-2">
+                                    <input type="number" placeholder="Goal" value={goalValue ?? ''} onChange={e => setGoalValue(e.target.valueAsNumber)} required className="w-1/2 form-input rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary" />
+                                    <input type="text" placeholder="Unit (e.g., pages)" value={goalUnit} onChange={e => setGoalUnit(e.target.value)} className="w-1/2 form-input rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-primary" />
+                                </div>
+                            )}
+                        </div>
+
+                        <div>
                             <label className="block text-sm font-medium mb-2">Frequency</label>
                             <div className="flex gap-2 p-1 rounded-lg bg-gray-200 dark:bg-gray-700">
                                 <button type="button" onClick={() => setFrequency('daily')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${frequency === 'daily' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Daily</button>
-                                <button type="button" onClick={() => setFrequency('weekly')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${frequency === 'weekly' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Weekly</button>
+                                <button type="button" onClick={() => setFrequency('weekly')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${frequency === 'weekly' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Specific Days</button>
+                                <button type="button" onClick={() => setFrequency('x_times_per_week')} className={`flex-1 p-2 text-sm font-semibold rounded-md ${frequency === 'x_times_per_week' ? 'bg-white dark:bg-gray-800 shadow-sm' : ''}`}>Times a Week</button>
                             </div>
                              {frequency === 'weekly' && (
                                 <div className="mt-2 flex justify-between gap-1">
                                     {daysOfWeek.map((day, i) => (
-                                        <button type="button" key={i} onClick={() => handleToggleDay(i)} className={`w-10 h-10 rounded-full text-sm font-semibold ${targetDays.includes(i) ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{day.charAt(0)}</button>
+                                        <button type="button" key={i} onClick={() => handleToggleDay(i)} className={`w-10 h-10 rounded-full text-sm font-semibold ${targetDays.includes(i) ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{day}</button>
                                     ))}
                                 </div>
+                             )}
+                             {frequency === 'x_times_per_week' && (
+                                 <div className="mt-2 flex items-center gap-2">
+                                     <input type="number" min="1" max="7" value={frequencyValue} onChange={e => setFrequencyValue(e.target.valueAsNumber)} className="w-20 form-input rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                                     <span className="text-sm">times per week</span>
+                                 </div>
                              )}
                         </div>
                         

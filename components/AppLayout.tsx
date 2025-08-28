@@ -2,7 +2,7 @@ import * as React from 'react';
 import Sidebar from './Sidebar';
 import MainContentView from './MainContentView';
 import DetailPane from './DetailPane';
-import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, TaskFilter, ChatSession, Goal, Comment, CustomFieldDefinition, UserStats, ChecklistItem, Habit, HabitLog, CustomReminder } from '../types';
+import { List, Task, Note, ActiveSelection, SavedFilter, StickyNote, StickyNoteBoard, StickyNoteLink, TaskFilter, ChatSession, Goal, Comment, CustomFieldDefinition, UserStats, ChecklistItem, Habit, HabitLog, CustomReminder } from '../types';
 import StickyNotesView from './StickyNotesView';
 import AIChatView from './AIChatView';
 import DashboardView from './DashboardView';
@@ -13,6 +13,7 @@ import AITaskParserView from './AITaskParserView';
 import { ChevronRightIcon } from './icons';
 import HabitsView from './HabitsView';
 import RemindersView from './RemindersView';
+import AddListModal from './AddListModal';
 
 interface AppLayoutProps {
   isSidebarCollapsed: boolean;
@@ -22,6 +23,8 @@ interface AppLayoutProps {
   notes: Note[];
   savedFilters: SavedFilter[];
   stickyNotes: StickyNote[];
+  stickyNoteBoards: StickyNoteBoard[];
+  stickyNoteLinks: StickyNoteLink[];
   chatSessions: ChatSession[];
   activeChatSessionId: number | null;
   onSendMessage: (message: string) => Promise<void>;
@@ -43,16 +46,22 @@ interface AppLayoutProps {
   onAddComment: (taskId: number, content: string) => void;
   onAddSavedFilter: (name: string, filter: TaskFilter) => void;
   onDeleteSavedFilter: (filterId: number) => void;
-  onAddStickyNote: () => void;
+  onAddStickyNoteBoard: (name: string) => Promise<StickyNoteBoard>;
+  onUpdateStickyNoteBoard: (board: StickyNoteBoard) => void;
+  onDeleteStickyNoteBoard: (boardId: number) => void;
+  onAddStickyNote: (boardId: number) => void;
   onUpdateStickyNote: (note: StickyNote) => void;
   onDeleteStickyNote: (id: number) => void;
+  onAddStickyNoteLink: (link: Omit<StickyNoteLink, 'id'>) => void;
+  onUpdateStickyNoteLink: (link: StickyNoteLink) => void;
+  onDeleteStickyNoteLink: (id: number) => void;
   goals: Goal[];
   onUpsertGoal: (goal: Omit<Goal, 'id'> & { id?: number }) => void;
   onDeleteGoal: (goalId: number) => void;
   onSelectGoal: (goalId: number) => void;
   habits: Habit[];
   habitLogs: HabitLog[];
-  onUpsertHabit: (habit: Omit<Habit, 'id'> & { id?: number }) => void;
+  onUpsertHabit: (habit: Omit<Habit, 'id' | 'createdAt'> & { id?: number }) => void;
   onDeleteHabit: (habitId: number) => void;
   onAddHabitLog: (habitId: number, date: string) => void;
   customReminders: CustomReminder[];
@@ -76,6 +85,36 @@ interface AppLayoutProps {
 const AppLayout = (props: AppLayoutProps) => {
   const { detailItem, onDetailItemChange, addingItemInfo, onOpenAddItemPane, onCloseDetailPane, onAddItem, activeSelection, userName, apiKey, onUpdateUser, onUpdateApiKey, customFieldDefinitions, setCustomFieldDefinitions, isSearchOpen, setIsSearchOpen, onStartFocus, onStartSubtaskFocus, isSidebarCollapsed, onToggleSidebar, userStats, isAiLoading, onQuickAddTask } = props;
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
+
+  const [listModalState, setListModalState] = React.useState<{
+    isOpen: boolean;
+    listToEdit: List | null;
+    defaultType: 'task' | 'note';
+    defaultParentId: number | null;
+  }>({
+    isOpen: false,
+    listToEdit: null,
+    defaultType: 'task',
+    defaultParentId: null,
+  });
+
+  const handleOpenListModal = (options: {
+    listToEdit?: List | null;
+    defaultType?: 'task' | 'note';
+    defaultParentId?: number | null;
+  }) => {
+    setListModalState({
+      isOpen: true,
+      listToEdit: options.listToEdit || null,
+      defaultType: options.defaultType || 'task',
+      defaultParentId: options.defaultParentId !== undefined ? options.defaultParentId : null,
+    });
+  };
+
+  const handleCloseListModal = () => {
+    setListModalState(prev => ({ ...prev, isOpen: false }));
+  };
+
 
   const renderContent = () => {
     switch (activeSelection.type) {
@@ -112,9 +151,17 @@ const AppLayout = (props: AppLayoutProps) => {
       case 'sticky-notes':
         return <StickyNotesView
            notes={props.stickyNotes}
+           boards={props.stickyNoteBoards}
+           links={props.stickyNoteLinks}
            onAddNote={props.onAddStickyNote}
            onUpdateNote={props.onUpdateStickyNote}
            onDeleteNote={props.onDeleteStickyNote}
+           onAddBoard={props.onAddStickyNoteBoard}
+           onUpdateBoard={props.onUpdateStickyNoteBoard}
+           onDeleteBoard={props.onDeleteStickyNoteBoard}
+           onAddLink={props.onAddStickyNoteLink}
+           onUpdateLink={props.onUpdateStickyNoteLink}
+           onDeleteLink={props.onDeleteStickyNoteLink}
         />;
       case 'goals':
         return <GoalsView
@@ -172,6 +219,8 @@ const AppLayout = (props: AppLayoutProps) => {
               onOpenAddItemPane={onOpenAddItemPane}
               customFieldDefinitions={props.customFieldDefinitions}
               onActiveSelectionChange={props.onActiveSelectionChange}
+              onDeleteList={props.onDeleteList}
+              onOpenListModal={handleOpenListModal}
           />;
     }
   };
@@ -209,9 +258,7 @@ const AppLayout = (props: AppLayoutProps) => {
         savedFilters={props.savedFilters}
         activeSelection={props.activeSelection}
         onActiveSelectionChange={props.onActiveSelectionChange}
-        onAddList={props.onAddList}
-        onUpdateList={props.onUpdateList}
-        onDeleteList={props.onDeleteList}
+        onOpenListModal={handleOpenListModal}
         onDeleteSavedFilter={props.onDeleteSavedFilter}
         onDetailItemChange={props.onDetailItemChange}
         userName={userName}
@@ -220,7 +267,7 @@ const AppLayout = (props: AppLayoutProps) => {
         onQuickAddTask={onQuickAddTask}
         isAiLoading={isAiLoading}
       />
-      <main className="flex-1 flex flex-col overflow-hidden bg-page dark:bg-page-dark">
+      <main className="flex-1 flex flex-col bg-page dark:bg-page-dark min-w-0">
         <button
           onClick={() => setIsMobileSidebarOpen(true)}
           className="md:hidden fixed top-1/2 -translate-y-1/2 left-0 z-30 p-2 pl-1 pr-0 text-gray-600 dark:text-gray-300 bg-white/80 dark:bg-black/80 rounded-r-full backdrop-blur-sm border-t border-b border-r border-gray-200 dark:border-gray-700 shadow-lg"
@@ -264,10 +311,22 @@ const AppLayout = (props: AppLayoutProps) => {
               key={detailItem?.id || 'add-pane'}
               isSidebarCollapsed={isSidebarCollapsed}
               allNotes={props.notes}
+              allTasks={props.tasks}
               onDetailItemChange={onDetailItemChange}
           />
         </>
       )}
+
+      <AddListModal
+          isOpen={listModalState.isOpen}
+          onClose={handleCloseListModal}
+          onAddList={props.onAddList}
+          onUpdateList={props.onUpdateList}
+          listToEdit={listModalState.listToEdit}
+          defaultType={listModalState.defaultType}
+          defaultParentId={listModalState.defaultParentId}
+          lists={props.lists}
+      />
     </div>
   );
 };

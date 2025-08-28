@@ -113,7 +113,7 @@ const TaskTableView = ({ tasks, onSelectTask }: { tasks: Task[]; onSelectTask: (
         <div className="p-4 overflow-auto h-full">
             <table className="w-full border-collapse text-sm">
                 <thead>
-                    <tr className="bg-primary/80 text-white">
+                    <tr className="bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300">
                         <th className="p-3 font-semibold text-left"><SortableHeader sortKey="title" sortConfig={sortConfig} setSortConfig={setSortConfig}>Title</SortableHeader></th>
                         <th className="p-3 font-semibold text-left">Description</th>
                         <th className="p-3 font-semibold text-left"><FilterableHeader filterKey="status" filters={filters} setFilters={setFilters} options={Object.values(Status)}>Status</FilterableHeader></th>

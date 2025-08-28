@@ -59,6 +59,15 @@ import {
   HiFire,
   HiArrowDownTray,
   HiBolt,
+  HiLink,
+  HiMinus,
+  HiArrowUpRight,
+  HiArrowPath,
+  HiArrowLongRight,
+  HiStopCircle,
+  HiLockClosed,
+  HiArchiveBox,
+  HiArchiveBoxXMark,
 } from 'react-icons/hi2';
 import { FaGithub, FaLinkedin, FaStickyNote } from 'react-icons/fa';
 import { TbAtom2 } from 'react-icons/tb';
@@ -131,6 +140,17 @@ export const ExclamationTriangleIcon = IconWrapper(HiExclamationTriangle);
 export const FireIcon = IconWrapper(HiFire);
 export const ExportIcon = IconWrapper(HiArrowDownTray);
 export const BoltIcon = IconWrapper(HiBolt);
+export const LinkIcon = IconWrapper(HiLink);
+export const MinusIcon = IconWrapper(HiMinus);
+export const ArrowUpRightIcon = IconWrapper(HiArrowUpRight);
+export const ArrowPathIcon = IconWrapper(HiArrowPath);
+export const ArrowLongRightIcon = IconWrapper(HiArrowLongRight);
+export const StopCircleIcon = IconWrapper(HiStopCircle);
+export const LockClosedIcon = IconWrapper(HiLockClosed);
+// FIX: Add missing ArchiveBox icons to resolve import errors.
+export const ArchiveBoxIcon = IconWrapper(HiArchiveBox);
+export const ArchiveBoxXMarkIcon = IconWrapper(HiArchiveBoxXMark);
+
 
 export const AtomIcon = ({ className }: { className?: string }) => (
     <div className={`${className} relative flex items-center justify-center`}>

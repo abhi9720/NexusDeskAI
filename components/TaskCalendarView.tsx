@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Task } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
+// FIX: Import functions not available in top-level 'date-fns' from their submodules.
 import {
   format,
   endOfWeek,

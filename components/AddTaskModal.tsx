@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { Task, Priority, Attachment, ChecklistItem } from '../types';
-import { XMarkIcon, PaperClipIcon, TrashIcon, PlusIcon, TagIcon } from './icons';
+import { XMarkIcon, PaperClipIcon, TrashIcon, PlusIcon, TagIcon, LinkIcon } from './icons';
 import { fileService } from '../services/storageService';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTask: (task: Partial<Task>) => void;
+  tasks: Task[];
 }
 
 const newId = () => Date.now() + Math.floor(Math.random() * 1000);
@@ -36,7 +37,7 @@ const AttachmentPreview = ({ attachment, onRemove }: { attachment: Attachment, o
     );
 }
 
-const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
+const AddTaskModal = ({ isOpen, onClose, onAddTask, tasks }: AddTaskModalProps) => {
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [dueDate, setDueDate] = React.useState('');
@@ -46,6 +47,10 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
   const [checklistItemText, setChecklistItemText] = React.useState('');
   const [tags, setTags] = React.useState<string[]>([]);
   const [tagInput, setTagInput] = React.useState('');
+  const [dependencyIds, setDependencyIds] = React.useState<number[]>([]);
+  const [dependencySearch, setDependencySearch] = React.useState('');
+  const [isDepDropdownOpen, setIsDepDropdownOpen] = React.useState(false);
+  const depDropdownRef = React.useRef<HTMLDivElement>(null);
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -60,10 +65,46 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
           setChecklistItemText('');
           setTags([]);
           setTagInput('');
+          setDependencyIds([]);
+          setDependencySearch('');
       }
   }, [isOpen]);
 
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (depDropdownRef.current && !depDropdownRef.current.contains(event.target as Node)) {
+            setIsDepDropdownOpen(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   if (!isOpen) return null;
+
+  const { dependencies, availableTasksForDependency } = React.useMemo(() => {
+    const deps = dependencyIds.map(id => tasks.find(t => t.id === id)).filter(Boolean) as Task[];
+
+    const existingIds = new Set(dependencyIds);
+
+    const available = tasks.filter(t =>
+        !existingIds.has(t.id) &&
+        t.title.toLowerCase().includes(dependencySearch.toLowerCase())
+    );
+    
+    return { dependencies: deps, availableTasksForDependency: available };
+  }, [dependencyIds, tasks, dependencySearch]);
+
+  const handleAddDependency = (depId: number) => {
+      setDependencyIds(prev => [...prev, depId]);
+      setIsDepDropdownOpen(false);
+      setDependencySearch('');
+  };
+
+  const handleRemoveDependency = (depId: number) => {
+      setDependencyIds(prev => prev.filter(id => id !== depId));
+  };
+
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -148,7 +189,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
         finalChecklist.push(newItem);
     }
 
-    onAddTask({ listId: 1, title, description, dueDate, priority, tags, attachments, checklist: finalChecklist, comments: [] });
+    onAddTask({ listId: 1, title, description, dueDate, priority, tags, attachments, checklist: finalChecklist, comments: [], dependencyIds });
     onClose();
   };
 
@@ -180,7 +221,7 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
               id="description"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={3}
+              rows={2}
               className="w-full px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary focus:border-primary"
               placeholder="Add more details about the task..."
             />
@@ -231,6 +272,41 @@ const AddTaskModal = ({ isOpen, onClose, onAddTask }: AddTaskModalProps) => {
                     placeholder="Add a tag..."
                     className="flex-grow bg-transparent focus:outline-none focus:ring-0 border-none p-0 text-sm"
                 />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dependencies</label>
+            <div className="p-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+                <LinkIcon className="w-3 h-3"/> Prerequisites
+                </h4>
+                {dependencies.map(dep => (
+                <div key={dep.id} className="flex items-center justify-between text-sm p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700/50">
+                    <span className="truncate" title={dep.title}>{dep.title}</span>
+                    <button type="button" onClick={() => handleRemoveDependency(dep.id)} className="p-1 text-red-500 hover:text-red-700">
+                    <XMarkIcon className="w-3 h-3"/>
+                    </button>
+                </div>
+                ))}
+                <div className="relative" ref={depDropdownRef}>
+                <input 
+                    type="text"
+                    value={dependencySearch}
+                    onChange={e => setDependencySearch(e.target.value)}
+                    onFocus={() => setIsDepDropdownOpen(true)}
+                    placeholder="+ Add prerequisite task"
+                    className="w-full text-sm mt-1 p-1 bg-transparent border-none focus:ring-0 placeholder-primary/70"
+                />
+                {isDepDropdownOpen && (
+                    <div className="absolute top-full mt-1 w-full max-h-48 overflow-y-auto bg-card-light dark:bg-card-dark rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                    {availableTasksForDependency.map(task => (
+                        <button key={task.id} type="button" onClick={() => handleAddDependency(task.id)} className="w-full text-left text-sm px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">{task.title}</button>
+                    ))}
+                    {availableTasksForDependency.length === 0 && <span className="block text-center text-xs text-gray-400 p-2">No tasks available</span>}
+                    </div>
+                )}
+                </div>
             </div>
           </div>
 

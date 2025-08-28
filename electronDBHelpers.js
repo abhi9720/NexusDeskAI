@@ -67,10 +67,11 @@ export { db };
 
 
 // const tables = [
-//     "List", "CustomFieldDefinition", "Task", "Note", "SavedFilter", "StickyNote", "ChatSession", "Goal", "UserStats", "settings", "Habit", "HabitLog"
+//     "List", "CustomFieldDefinition", "Task", "Note", "SavedFilter", "StickyNoteBoard", "StickyNote", "StickyNoteLink", "ChatSession", "Goal", "UserStats", "Habit", "HabitLog", "settings"
 // ];
 
 // tables.forEach(table => {
+//     console.log(`Dropping table if exists: ${table}`);
 //     try {
 //         db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
 //         console.log(`Dropped table: ${table}`);
@@ -89,7 +90,7 @@ CREATE TABLE IF NOT EXISTS List (
     color TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('task', 'note')),
     parentId INTEGER,
-    defaultView TEXT CHECK(defaultView IN ('list', 'board', 'calendar')),
+    defaultView TEXT,
     statuses TEXT,
     FOREIGN KEY (parentId) REFERENCES List(id) ON DELETE SET NULL
 );
@@ -98,8 +99,8 @@ CREATE TABLE IF NOT EXISTS CustomFieldDefinition (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    listId INTEGER,
     options TEXT,
+    listId INTEGER,
     FOREIGN KEY (listId) REFERENCES List(id) ON DELETE CASCADE
 );
 
@@ -110,17 +111,19 @@ CREATE TABLE IF NOT EXISTS Task (
     description TEXT,
     status TEXT NOT NULL,
     priority TEXT NOT NULL,
-    dueDate DATETIME,
-    reminder DATETIME,
-    createdAt DATETIME NOT NULL,
+    dueDate TEXT NOT NULL,
+    reminder TEXT,
     tags TEXT,
+    createdAt TEXT NOT NULL,
     attachments TEXT,
     checklist TEXT,
     comments TEXT,
-    embedding VECTOR(384),
     activityLog TEXT,
     customFields TEXT,
     linkedNoteIds TEXT,
+    dependencyIds TEXT,
+    blockingIds TEXT,
+    embedding VECTOR(384),
     FOREIGN KEY (listId) REFERENCES List(id) ON DELETE CASCADE
 );
 
@@ -129,9 +132,9 @@ CREATE TABLE IF NOT EXISTS Note (
     listId INTEGER NOT NULL,
     title TEXT NOT NULL,
     content TEXT,
-    createdAt DATETIME NOT NULL,
-    updatedAt DATETIME,
     tags TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
     attachments TEXT,
     embedding VECTOR(384),
     FOREIGN KEY (listId) REFERENCES List(id) ON DELETE CASCADE
@@ -143,30 +146,53 @@ CREATE TABLE IF NOT EXISTS SavedFilter (
     filter TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS StickyNoteBoard (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS StickyNote (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    boardId INTEGER NOT NULL,
     title TEXT,
     content TEXT,
     color TEXT,
-    position TEXT NOT NULL
+    position TEXT NOT NULL,
+    size TEXT NOT NULL,
+    FOREIGN KEY (boardId) REFERENCES StickyNoteBoard(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS StickyNoteLink (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    boardId INTEGER NOT NULL,
+    startNoteId INTEGER,
+    endNoteId INTEGER,
+    startPosition TEXT,
+    endPosition TEXT,
+    style TEXT NOT NULL,
+    endStyle TEXT NOT NULL,
+    FOREIGN KEY (boardId) REFERENCES StickyNoteBoard(id) ON DELETE CASCADE,
+    FOREIGN KEY (startNoteId) REFERENCES StickyNote(id) ON DELETE SET NULL,
+    FOREIGN KEY (endNoteId) REFERENCES StickyNote(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS ChatSession (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
-    createdAt DATETIME NOT NULL,
-    messages TEXT NOT NULL
+    messages TEXT NOT NULL,
+    createdAt TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Goal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     motivation TEXT,
-    targetDate DATETIME,
-    createdAt DATETIME,
-    completedAt DATETIME,
-    status TEXT,
-    progress INTEGER,
+    targetDate TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    completedAt TEXT,
+    status TEXT NOT NULL,
+    progress INTEGER NOT NULL,
     linkedTaskListIds TEXT,
     journal TEXT
 );
@@ -183,16 +209,22 @@ CREATE TABLE IF NOT EXISTS Habit (
     name TEXT NOT NULL,
     icon TEXT NOT NULL,
     color TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    isArchived INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL,
+    goalValue REAL,
+    goalUnit TEXT,
     frequency TEXT NOT NULL,
     targetDays TEXT,
-    reminderTime TEXT,
-    createdAt TEXT NOT NULL
+    frequencyValue INTEGER,
+    reminderTime TEXT
 );
 
 CREATE TABLE IF NOT EXISTS HabitLog (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     habitId INTEGER NOT NULL,
     date TEXT NOT NULL,
+    completedValue REAL,
     FOREIGN KEY (habitId) REFERENCES Habit(id) ON DELETE CASCADE
 );
 
@@ -200,7 +232,7 @@ CREATE TABLE IF NOT EXISTS CustomReminder (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     remindAt TEXT NOT NULL,
-    isCompleted BOOLEAN NOT NULL DEFAULT 0,
+    isCompleted INTEGER NOT NULL DEFAULT 0,
     createdAt TEXT NOT NULL
 );
 
@@ -210,24 +242,26 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-// Insert default settings
-const defaultSettings = [
-    { id: 'onboardingComplete', value: 'false' },
-    { id: 'userName', value: '' },
-    { id: 'apiKey', value: '' },
-];
-defaultSettings.forEach(setting => {
-    const existing = db.prepare(`SELECT 1 FROM settings WHERE id = ?`).get(setting.id);
-    if (!existing) {
-        db.prepare(`INSERT INTO settings (id, value) VALUES (?, ?)`).run(setting.id, setting.value);
-    }
-});
+// // Insert default settings
+// const defaultSettings = [
+//     { id: 'onboardingComplete', value: 'false' },
+//     { id: 'userName', value: '' },
+//     { id: 'apiKey', value: '' },
+// ];
+// defaultSettings.forEach(setting => {
+//     const existing = db.prepare(`SELECT 1 FROM settings WHERE id = ?`).get(setting.id);
+//     console.log(setting.id, existing);
+    
+//     if (!existing) {
+//         db.prepare(`INSERT INTO settings (id, value) VALUES (?, ?)`).run(setting.id, setting.value);
+//     }
+// });
 
-// Insert default user stats
-const existingStats = db.prepare(`SELECT 1 FROM UserStats WHERE id = 1`).get();
-if (!existingStats) {
-    db.prepare(`INSERT INTO UserStats (id, points, currentStreak, lastCompletionDate) VALUES (?, ?, ?, ?)`).run(1, 0, 0, null);
-}
+// // Insert default user stats
+// const existingStats = db.prepare(`SELECT 1 FROM UserStats WHERE id = 1`).get();
+// if (!existingStats) {
+//     db.prepare(`INSERT INTO UserStats (id, points, currentStreak, lastCompletionDate) VALUES (?, ?, ?, ?)`).run(1, 0, 0, null);
+// }
 
 
 // ------------------ Embedding ------------------

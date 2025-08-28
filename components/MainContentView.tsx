@@ -8,10 +8,12 @@ import SaveFilterModal from './SaveFilterModal';
 import ListOverview from './ProjectOverview';
 import TaskCalendarView from './TaskCalendarView';
 import TaskTableView from './TaskTableView';
-import { QueueListIcon, ViewColumnsIcon, PlusIcon, DashboardIcon, FilterIcon, GroupByIcon, SortIcon, CalendarDaysIcon, CheckIcon, Bars3Icon, ExportIcon, XMarkIcon, TableCellsIcon } from './icons';
+import { QueueListIcon, ViewColumnsIcon, PlusIcon, DashboardIcon, FilterIcon, GroupByIcon, SortIcon, CalendarDaysIcon, CheckIcon, Bars3Icon, ExportIcon, XMarkIcon, TableCellsIcon, PencilIcon, TrashIcon, EllipsisHorizontalIcon, FolderPlusIcon } from './icons';
+// FIX: Import 'startOfDay' from its submodule 'date-fns/startOfDay'.
 import { isWithinInterval, addDays, isToday as isTodayFns, format, isPast } from 'date-fns';
 import startOfDay from 'date-fns/startOfDay';
-import * as XLSX from "xlsx";
+import * as XLSX from 'xlsx';
+
 const DropdownMenuItem = ({ label, current, value, set, setOpen }: { label:string, current: string, value: string, set: (s:any)=>void, setOpen: (b:boolean)=>void }) => {
     const isActive = current === value;
     return (
@@ -120,6 +122,21 @@ const ExportOptionsModal = ({ isOpen, onClose, onExport, customFieldDefinitions,
 };
 
 
+const ViewButton = ({ title, isActive, onClick, children }: { title: string; isActive: boolean; onClick: () => void; children: React.ReactNode }) => {
+    const activeClasses = 'bg-gray-300 dark:bg-gray-900/70 shadow-inner text-gray-800 dark:text-white';
+    const inactiveClasses = 'text-gray-500 dark:text-gray-400 hover:bg-gray-500/10 hover:text-gray-800 dark:hover:text-white';
+
+    return (
+        <button
+            onClick={onClick}
+            className={`p-1.5 rounded-md transition-colors ${isActive ? activeClasses : inactiveClasses}`}
+            title={title}
+        >
+            {children}
+        </button>
+    );
+};
+
 interface MainContentViewProps {
   activeSelection: ActiveSelection;
   lists: List[];
@@ -135,10 +152,16 @@ interface MainContentViewProps {
   onOpenAddItemPane: (listId: number, type: 'task' | 'note') => void;
   customFieldDefinitions: CustomFieldDefinition[];
   onActiveSelectionChange: (selection: ActiveSelection) => void;
+  onDeleteList: (listId: number) => void;
+  onOpenListModal: (options: {
+    listToEdit?: List | null;
+    defaultType?: 'task' | 'note';
+    defaultParentId?: number | null;
+  }) => void;
 }
 
 const MainContentView = (props: MainContentViewProps) => {
-  const { activeSelection, lists, tasks, notes, savedFilters, onSelectItem, onUpdateItem, onAddSavedFilter, onAddItem, onUpdateList, onStartFocus, onOpenAddItemPane, customFieldDefinitions, onActiveSelectionChange } = props;
+  const { activeSelection, lists, tasks, notes, savedFilters, onSelectItem, onUpdateItem, onAddSavedFilter, onAddItem, onUpdateList, onStartFocus, onOpenAddItemPane, customFieldDefinitions, onActiveSelectionChange, onDeleteList, onOpenListModal } = props;
   const [viewType, setViewType] = useState<'overview' | 'board' | 'list' | 'calendar' | 'table'>('board');
   const [taskFilter, setTaskFilter] = useState<TaskFilter>({ keyword: '', status: 'all', priority: 'all' });
   const [isSaveFilterModalOpen, setIsSaveFilterModalOpen] = useState(false);
@@ -147,9 +170,11 @@ const MainContentView = (props: MainContentViewProps) => {
   const [groupBy, setGroupBy] = useState<'default' | 'priority' | 'status' | 'tag'>('default');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
+  const [isListMenuOpen, setIsListMenuOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const groupMenuRef = useRef<HTMLDivElement>(null);
+  const listMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -159,10 +184,13 @@ const MainContentView = (props: MainContentViewProps) => {
            if (groupMenuRef.current && !groupMenuRef.current.contains(event.target as Node)) {
               setIsGroupMenuOpen(false);
           }
+           if (listMenuRef.current && !listMenuRef.current.contains(event.target as Node)) {
+              setIsListMenuOpen(false);
+          }
       };
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [sortMenuRef, groupMenuRef]);
+  }, [sortMenuRef, groupMenuRef, listMenuRef]);
 
   const { title, items, isTaskView, currentList, isTagView, taggedTasks, taggedNotes, subfolders } = useMemo(() => {
     const result = {
@@ -296,7 +324,7 @@ const MainContentView = (props: MainContentViewProps) => {
             }
         }
     } else if (activeSelection.type === 'smart-list' && activeSelection.id === 'today') {
-        if (viewType === 'calendar' || viewType === 'table') {
+        if (viewType === 'calendar') {
             setViewType('board');
         }
     }
@@ -504,235 +532,179 @@ const MainContentView = (props: MainContentViewProps) => {
                 const task = listTasks[R - 1];
                 const isDone = task.status === Status.Done;
                 const dueDate = safeParseDate(task.dueDate);
-                const isOverdue = dueDate && !isDone && isPast(dueDate) && !isTodayFns(dueDate);
+                const isOverdue = dueDate && dueDate < today && !isDone;
 
                 for (let C = 0; C <= range.e.c; ++C) {
-                    const cell_address = XLSX.utils.encode_cell({c: C, r: R});
-                    if (!wsTasks[cell_address]) continue;
+                    const cell_address = { c: C, r: R };
+                    const cell_ref = XLSX.utils.encode_cell(cell_address);
+                    if (!wsTasks[cell_ref]) continue;
 
-                    const colName = selectedColumns[C];
-                    if(colName === 'Due Date' || colName === 'Created At') {
-                        if (wsTasks[cell_address].v instanceof Date) {
-                           wsTasks[cell_address].z = 'yyyy-mm-dd hh:mm';
-                        }
-                    }
+                    let cellStyle: any = isDone ? { ...STYLES.done } : { ...STYLES.taskCell };
+                    const header = wsTasks[XLSX.utils.encode_cell({ c: C, r: 0 })].v;
 
-                    let cellStyle = isDone ? STYLES.done : STYLES.taskCell;
-                    if (colName === 'Priority' && !isDone) {
-                        cellStyle = STYLES.priorityCell[task.priority] || STYLES.taskCell;
+                    if (header === 'Priority') {
+                        cellStyle = isDone ? { ...STYLES.done } : { ...STYLES.priorityCell[task.priority] };
                     }
-                    if (colName === 'Due Date' && isOverdue) {
-                        cellStyle = { ...cellStyle, font: { ...((cellStyle as any).font || {}), ...STYLES.overdue.font } };
+                    if (header === 'Due Date' && isOverdue) {
+                        cellStyle.font = { ...cellStyle.font, ...STYLES.overdue.font };
                     }
-                    wsTasks[cell_address].s = cellStyle;
+                    wsTasks[cell_ref].s = cellStyle;
                 }
             }
-            
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cell_address = XLSX.utils.encode_cell({ c: C, r: 0 });
-                if (wsTasks[cell_address]) wsTasks[cell_address].s = STYLES.taskHeader;
+
+            // Style headers
+            for (let C = 0; C <= range.e.c; ++C) {
+                const cell_ref = XLSX.utils.encode_cell({ c: C, r: 0 });
+                if (wsTasks[cell_ref]) {
+                    wsTasks[cell_ref].s = STYLES.taskHeader;
+                }
             }
+
             XLSX.utils.book_append_sheet(wb, wsTasks, "Tasks");
         }
-    
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${currentList.name.replace(/ /g, "_")}_Export.xlsx`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+
+        const fileName = `${currentList.name.replace(/ /g,"_")}_Export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        XLSX.writeFile(wb, fileName);
     };
 
-  const HeaderTab = ({ icon, label, type }: { icon: React.ReactNode, label: string, type: typeof viewType }) => {
-        const isActive = viewType === type;
+  const renderContent = () => {
+    if (isTagView) {
         return (
-            <button 
-                onClick={() => setViewType(type)}
-                className={`flex items-center space-x-2 px-3 py-2 border-b-2 text-sm transition-colors ${
-                    isActive
-                        ? 'border-primary text-primary font-semibold'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-            >
-                {icon}
-                <span>{label}</span>
-            </button>
-        );
-    };
-    
-    const HeaderAction = ({ icon, label, onClick, isActive }: { icon: React.ReactNode, label: string, onClick?: () => void, isActive?: boolean }) => (
-         <button onClick={onClick} className={`flex items-center space-x-2 px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors ${
-            isActive
-            ? 'bg-primary/10 dark:bg-primary/20 text-primary font-semibold'
-            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-         }`}>
-            {icon}
-            <span className="hidden sm:inline">{label}</span>
-        </button>
-    );
-
-    const isFilterActive = useMemo(() => 
-        taskFilter.keyword !== '' || taskFilter.priority !== 'all' || taskFilter.status !== 'all'
-    , [taskFilter]);
-
-    const isSortActive = sortType !== 'default';
-    const isGroupActive = groupBy !== 'default';
-
-    const renderContent = () => {
-        if (isTagView) {
-            return (
-                <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
-                    {taggedTasks.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Tasks ({taggedTasks.length})</h2>
-                            <TaskListView tasks={taggedTasks} onSelectTask={onSelectItem} groupBy={'default'} onStartFocus={onStartFocus} />
-                        </div>
-                    )}
-                    {taggedNotes.length > 0 && (
-                        <div>
-                            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Notes ({taggedNotes.length})</h2>
-                            <NoteListView notes={taggedNotes} subfolders={[]} onSelectNote={onSelectItem} onSelectFolder={() => {}} />
-                        </div>
-                    )}
-                </div>
-            )
-        }
-
-        if (!isTaskView) {
-            return <NoteListView
-              notes={items as Note[]}
-              subfolders={subfolders}
-              onSelectNote={onSelectItem}
-              onSelectFolder={(listId) => onActiveSelectionChange({ type: 'list', id: listId })}
-            />;
-        }
-        
-        switch (viewType) {
-            case 'overview':
-                return <ListOverview tasks={sortedTasks} list={currentList} />;
-            case 'board':
-                return <TaskBoardView tasks={sortedTasks} list={currentList} onSelectTask={onSelectItem} onUpdateTask={onUpdateItem} onUpdateList={onUpdateList} onStartFocus={onStartFocus} />;
-            case 'list':
-                 return <TaskListView tasks={sortedTasks} onSelectTask={onSelectItem} groupBy={groupBy} onStartFocus={onStartFocus} />;
-            case 'calendar':
-                return <TaskCalendarView tasks={sortedTasks} onSelectTask={onSelectItem} />;
-            case 'table':
-                return <TaskTableView tasks={sortedTasks} onSelectTask={onSelectItem} />;
-            default:
-                return null;
-        }
-    };
-
-    return (
-        <div className="h-full flex flex-col">
-            <header className="flex-shrink-0 p-4 sm:p-6 lg:p-8 pb-0">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                     <div>
-                        {breadcrumb.length > 0 && (
-                            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-1">
-                                {breadcrumb.map(l => (
-                                    <React.Fragment key={l.id}>
-                                        <button onClick={() => onActiveSelectionChange({ type: 'list', id: l.id })} className="hover:underline">{l.name}</button>
-                                        <span className="mx-2">/</span>
-                                    </React.Fragment>
-                                ))}
-                            </div>
-                        )}
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{title}</h1>
-                    </div>
-                    {isTaskView && currentList && (
-                        <button
-                            onClick={() => onOpenAddItemPane(currentList.id, 'task')}
-                            className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-md"
-                        >
-                            <PlusIcon className="w-5 h-5" />
-                            <span>Add Task</span>
-                        </button>
-                    )}
-                    {!isTaskView && currentList && (
-                        <button
-                           onClick={() => onOpenAddItemPane(currentList.id, 'note')}
-                           className="flex-shrink-0 flex items-center space-x-2 px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-md"
-                        >
-                           <PlusIcon className="w-5 h-5" />
-                           <span>Add {currentList.parentId !== null ? 'Note' : 'Folder'}</span>
-                        </button>
-                    )}
-                </div>
-
-                {isTaskView && (
-                    <div className="mt-4 flex flex-col sm:flex-row justify-between items-center border-b border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center -mb-px">
-                            <HeaderTab icon={<DashboardIcon className="w-4 h-4" />} label="Overview" type="overview" />
-                            <HeaderTab icon={<ViewColumnsIcon className="w-4 h-4" />} label="Board" type="board" />
-                            <HeaderTab icon={<QueueListIcon className="w-4 h-4" />} label="List" type="list" />
-                            <HeaderTab icon={<TableCellsIcon className="w-4 h-4" />} label="Table" type="table" />
-                            <HeaderTab icon={<CalendarDaysIcon className="w-4 h-4" />} label="Calendar" type="calendar" />
-                        </div>
-                        <div className="flex items-center gap-1 sm:gap-2 mt-2 sm:mt-0">
-                            <HeaderAction icon={<FilterIcon className="w-4 h-4"/>} label="Filter" onClick={() => setIsFilterVisible(p => !p)} isActive={isFilterActive} />
-                            
-                            {viewType === 'list' && (
-                                <>
-                                    <div className="relative" ref={groupMenuRef}>
-                                        <HeaderAction icon={<GroupByIcon className="w-4 h-4"/>} label="Group" onClick={() => setIsGroupMenuOpen(p => !p)} isActive={isGroupActive} />
-                                        {isGroupMenuOpen && (
-                                            <div className="absolute top-full right-0 mt-2 w-48 bg-card-light dark:bg-card-dark rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                                <DropdownMenuItem label="Default" current={groupBy} value="default" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
-                                                <DropdownMenuItem label="Status" current={groupBy} value="status" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
-                                                <DropdownMenuItem label="Priority" current={groupBy} value="priority" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
-                                                <DropdownMenuItem label="Tag" current={groupBy} value="tag" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="relative" ref={sortMenuRef}>
-                                        <HeaderAction icon={<SortIcon className="w-4 h-4"/>} label="Sort" onClick={() => setIsSortMenuOpen(p => !p)} isActive={isSortActive} />
-                                         {isSortMenuOpen && (
-                                            <div className="absolute top-full right-0 mt-2 w-48 bg-card-light dark:bg-card-dark rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                                <DropdownMenuItem label="Default" current={sortType} value="default" set={setSortType} setOpen={setIsSortMenuOpen} />
-                                                <DropdownMenuItem label="Priority" current={sortType} value="priority" set={setSortType} setOpen={setIsSortMenuOpen} />
-                                                <DropdownMenuItem label="Due Date" current={sortType} value="dueDate" set={setSortType} setOpen={setIsSortMenuOpen} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-                            <HeaderAction icon={<ExportIcon className="w-4 h-4"/>} label="Export" onClick={() => setIsExportModalOpen(true)} />
-                        </div>
+            <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
+                {taggedTasks.length > 0 && (
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Tasks ({taggedTasks.length})</h3>
+                        <TaskListView tasks={taggedTasks} allTasks={tasks} onSelectTask={onSelectItem as (task: Task) => void} groupBy="status" onStartFocus={onStartFocus} />
                     </div>
                 )}
-            </header>
-            
-            {isTaskView && isFilterVisible && (
-                <TaskFilterBar
-                    filter={taskFilter}
-                    onFilterChange={setTaskFilter}
-                    onSaveFilter={() => setIsSaveFilterModalOpen(true)}
-                    onClose={handleCloseFilter}
-                />
-            )}
-            
-            <div className="flex-grow overflow-y-auto">
-                {renderContent()}
+                {taggedNotes.length > 0 && (
+                    <div>
+                        <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Notes ({taggedNotes.length})</h3>
+                        <NoteListView notes={taggedNotes} subfolders={[]} onSelectNote={onSelectItem as (note: Note) => void} onSelectFolder={() => {}} onEditFolder={() => {}} onDeleteFolder={() => {}}/>
+                    </div>
+                )}
             </div>
-            <SaveFilterModal
-                isOpen={isSaveFilterModalOpen}
-                onClose={() => setIsSaveFilterModalOpen(false)}
-                onSave={handleSaveFilter}
-            />
-            <ExportOptionsModal
-              isOpen={isExportModalOpen}
-              onClose={() => setIsExportModalOpen(false)}
-              onExport={handleExport}
-              customFieldDefinitions={customFieldDefinitions}
-              listId={currentList?.id}
-            />
+        )
+    }
+    
+    if (!isTaskView && currentList?.type === 'note') {
+        return <NoteListView notes={items as Note[]} subfolders={subfolders} onSelectNote={onSelectItem as (note: Note) => void} onSelectFolder={(id) => onActiveSelectionChange({type: 'list', id})} onEditFolder={(list) => onOpenListModal({ listToEdit: list })} onDeleteFolder={onDeleteList} />;
+    }
+
+    if (!isTaskView) return null; // Should not happen
+
+    switch (viewType) {
+        case 'overview':
+            return <ListOverview tasks={items as Task[]} list={currentList} />;
+        case 'board':
+            return <TaskBoardView tasks={sortedTasks} allTasks={tasks} list={currentList} onSelectTask={onSelectItem as (task: Task) => void} onUpdateTask={onUpdateItem as (task: Task) => void} onUpdateList={onUpdateList} onStartFocus={onStartFocus} />;
+        case 'list':
+            return <TaskListView tasks={sortedTasks} allTasks={tasks} onSelectTask={onSelectItem as (task: Task) => void} groupBy={groupBy} onStartFocus={onStartFocus} />;
+        case 'calendar':
+            return <TaskCalendarView tasks={tasks} onSelectTask={onSelectItem as (task: Task) => void} />;
+        case 'table':
+            return <TaskTableView tasks={sortedTasks} onSelectTask={onSelectItem as (task: Task) => void} />;
+        default:
+            return null;
+    }
+  };
+
+  return (
+    <div className="h-full w-full flex flex-col min-h-0">
+        <header className="p-4 border-b border-gray-200 dark:border-gray-700/80 flex-shrink-0">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                 <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                    {breadcrumb.length > 0 && (
+                        <>
+                            {breadcrumb.flatMap(l => [
+                                <button key={l.id} onClick={() => onActiveSelectionChange({ type: 'list', id: l.id })} className="hover:underline">{l.name}</button>,
+                                <span key={`${l.id}-slash`}>/</span>
+                            ])}
+                        </>
+                    )}
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-white truncate" title={title}>
+                        {title}
+                    </h2>
+                    {currentList && (
+                        <div className="relative" ref={listMenuRef}>
+                            <button onClick={() => setIsListMenuOpen(p => !p)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <EllipsisHorizontalIcon className="w-5 h-5"/>
+                            </button>
+                            {isListMenuOpen && (
+                                <div className="absolute left-0 mt-2 w-48 bg-card-light dark:bg-card-dark rounded-md shadow-lg z-20 border border-gray-200 dark:border-gray-700 py-1">
+                                    <button onClick={() => { onOpenListModal({ listToEdit: currentList }); setIsListMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"><PencilIcon className="w-4 h-4" /> Edit List</button>
+                                    {currentList.type === 'note' && (
+                                        <button onClick={() => { onOpenListModal({ defaultType: 'note', defaultParentId: currentList.id }); setIsListMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"><FolderPlusIcon className="w-4 h-4" /> Add Subfolder</button>
+                                    )}
+                                    <button onClick={() => { if(window.confirm(`Delete "${currentList.name}"?`)) onDeleteList(currentList.id); setIsListMenuOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"><TrashIcon className="w-4 h-4" /> Delete List</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    {isTaskView && (
+                        <div className="flex items-center bg-gray-200 dark:bg-gray-700/60 p-1 rounded-lg">
+                            {currentList && (
+                                <ViewButton title="Overview" isActive={viewType === 'overview'} onClick={() => setViewType('overview')}>
+                                    <DashboardIcon className="w-5 h-5"/>
+                                </ViewButton>
+                            )}
+                            <ViewButton title="Board View" isActive={viewType === 'board'} onClick={() => setViewType('board')}>
+                                <ViewColumnsIcon className="w-5 h-5"/>
+                            </ViewButton>
+                            <ViewButton title="List View" isActive={viewType === 'list'} onClick={() => setViewType('list')}>
+                                <QueueListIcon className="w-5 h-5"/>
+                            </ViewButton>
+                            <ViewButton title="Calendar View" isActive={viewType === 'calendar'} onClick={() => setViewType('calendar')}>
+                                <CalendarDaysIcon className="w-5 h-5"/>
+                            </ViewButton>
+                            <ViewButton title="Table View" isActive={viewType === 'table'} onClick={() => setViewType('table')}>
+                                <TableCellsIcon className="w-5 h-5"/>
+                            </ViewButton>
+                        </div>
+                    )}
+                    {isTaskView && viewType !== 'overview' && viewType !== 'calendar' && (
+                         <div className="flex items-center gap-1">
+                            <button onClick={() => setIsFilterVisible(p => !p)} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700/60" title="Filter"><FilterIcon className="w-5 h-5"/></button>
+                            <div className="relative" ref={sortMenuRef}>
+                                <button onClick={() => setIsSortMenuOpen(p => !p)} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700/60" title="Sort"><SortIcon className="w-5 h-5"/></button>
+                                {isSortMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-card-light dark:bg-card-dark rounded-md shadow-lg z-20 border border-gray-200 dark:border-gray-700 py-1">
+                                        <DropdownMenuItem label="Default" current={sortType} value="default" set={setSortType} setOpen={setIsSortMenuOpen} />
+                                        <DropdownMenuItem label="By Priority" current={sortType} value="priority" set={setSortType} setOpen={setIsSortMenuOpen} />
+                                        <DropdownMenuItem label="By Due Date" current={sortType} value="dueDate" set={setSortType} setOpen={setIsSortMenuOpen} />
+                                    </div>
+                                )}
+                            </div>
+                            {viewType === 'list' && (
+                                <div className="relative" ref={groupMenuRef}>
+                                <button onClick={() => setIsGroupMenuOpen(p => !p)} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700/60" title="Group By"><GroupByIcon className="w-5 h-5"/></button>
+                                {isGroupMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-card-light dark:bg-card-dark rounded-md shadow-lg z-20 border border-gray-200 dark:border-gray-700 py-1">
+                                        <DropdownMenuItem label="Default (by date)" current={groupBy} value="default" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
+                                        <DropdownMenuItem label="By Status" current={groupBy} value="status" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
+                                        <DropdownMenuItem label="By Priority" current={groupBy} value="priority" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
+                                        <DropdownMenuItem label="By Tag" current={groupBy} value="tag" set={setGroupBy} setOpen={setIsGroupMenuOpen} />
+                                    </div>
+                                )}
+                                </div>
+                            )}
+                            {currentList && <button onClick={() => setIsExportModalOpen(true)} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700/60" title="Export"><ExportIcon className="w-5 h-5"/></button>}
+                         </div>
+                    )}
+                    {currentList && <button onClick={() => onOpenAddItemPane(currentList.id, currentList.type)} className="flex items-center space-x-2 px-3 py-2 bg-primary text-white font-semibold text-sm rounded-lg hover:bg-primary-dark transition-all transform hover:scale-105 shadow-md"><PlusIcon className="w-5 h-5" /><span>Add New</span></button>}
+                </div>
+            </div>
+            {isFilterVisible && isTaskView && <TaskFilterBar filter={taskFilter} onFilterChange={setTaskFilter} onSaveFilter={() => setIsSaveFilterModalOpen(true)} onClose={handleCloseFilter} />}
+        </header>
+        <div className="flex-grow overflow-y-auto">
+            {renderContent()}
         </div>
-    );
+        <SaveFilterModal isOpen={isSaveFilterModalOpen} onClose={() => setIsSaveFilterModalOpen(false)} onSave={handleSaveFilter} />
+        <ExportOptionsModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} onExport={handleExport} customFieldDefinitions={customFieldDefinitions} listId={currentList?.id} />
+    </div>
+  );
 };
 
 export default MainContentView;

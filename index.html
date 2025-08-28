@@ -1,161 +1,202 @@
+
 <!DOCTYPE html>
 <html lang="en" class="h-full">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TaskFlow AI</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              page: 'hsl(var(--color-page, 220 20% 98%))',
-              container: 'hsl(var(--color-container, 220 16% 96%))',
-              card: 'hsl(var(--color-card, 0 0% 100%))',
-              
-              'page-dark': 'hsl(var(--color-page-dark, 222 47% 8%))',
-              'container-dark': 'hsl(var(--color-container-dark, 222 47% 11%))',
-              'card-dark': 'hsl(var(--color-card-dark, 222 47% 15%))',
 
-              primary: {
-                DEFAULT: 'hsl(var(--color-primary, 255 96% 70%))',
-                light: 'hsl(var(--color-primary-light, 255 96% 76%))',
-                dark: 'hsl(var(--color-primary-dark, 262 84% 59%))',
-              },
-              secondary: '#10B981',
-              accent: '#EC4899',
-
-              // Legacy colors, map to new ones
-              'brand-light': 'hsl(var(--color-page, 220 20% 98%))',
-              'sidebar-light': 'hsl(var(--color-container, 220 16% 96%))',
-              'card-light': 'hsl(var(--color-card, 0 0% 100%))',
-              'brand-dark': 'hsl(var(--color-page-dark, 222 47% 8%))',
-              'sidebar-dark': 'hsl(var(--color-container-dark, 222 47% 11%))',
-            },
-            keyframes: {
-              'fade-in': {
-                '0%': { opacity: '0', transform: 'translateY(-10px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              },
-               'fade-in-overlay': {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              'scale-in': {
-                '0%': { opacity: '0', transform: 'scale(0.95)' },
-                '100%': { opacity: '1', transform: 'scale(1)' },
-              },
-               'slide-in-right': {
-                '0%': { transform: 'translateX(100%)', opacity: '0' },
-                '100%': { transform: 'translateX(0)', opacity: '1' },
-              },
-              'aurora': {
-                  'from': { backgroundPosition: '50% 50%, 50% 50%' },
-                  'to': { backgroundPosition: '350% 50%, 350% 50%' },
-              },
-              'pulse-subtle': {
-                '0%, 100%': { transform: 'scale(1)', opacity: '1' },
-                '50%': { transform: 'scale(1.02)', opacity: '0.95' },
-              }
-            },
-            animation: {
-              'fade-in': 'fade-in 0.5s ease-out forwards',
-              'fade-in-overlay': 'fade-in-overlay 0.3s ease-out forwards',
-              'scale-in': 'scale-in 0.2s ease-out forwards',
-              'slide-in-right': 'slide-in-right 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
-              'aurora': 'aurora 60s linear infinite',
-              'pulse-subtle': 'pulse-subtle 3s ease-in-out infinite',
-            },
-             typography: (theme) => ({
-              DEFAULT: {
-                css: {
-                  a: {
-                    color: theme('colors.primary.DEFAULT'),
-                    '&:hover': {
-                      color: theme('colors.primary.dark'),
-                    },
-                  },
-                  'h1, h2, h3, h4': {
-                    color: theme('colors.gray.900'),
-                  },
-                  '--tw-prose-body': theme('colors.gray[700]'),
-                  '--tw-prose-headings': theme('colors.gray[900]'),
-                  '--tw-prose-bold': theme('colors.gray[900]'),
-                  '--tw-prose-invert-body': theme('colors.gray[200]'),
-                  '--tw-prose-invert-headings': theme('colors.white'),
-                  '--tw-prose-invert-bold': theme('colors.white'),
-                  'code::before': { content: '"" !important' },
-                  'code::after': { content: '"" !important' },
-                  code: {
-                    backgroundColor: theme('colors.gray.100'),
-                    padding: '0.2em 0.4em',
-                    margin: '0',
-                    fontSize: '85%',
-                    borderRadius: '0.25rem',
-                  },
-                  'pre > code': {
-                    backgroundColor: 'transparent',
-                    padding: '0',
-                    margin: '0',
-                    fontSize: '100%',
-                    borderRadius: '0',
-                  },
-                  pre: {
-                    backgroundColor: theme('colors.gray.900'),
-                    color: theme('colors.gray.100'),
-                  },
-                  '--tw-prose-invert-pre-bg': theme('colors.gray.800'),
-                  '--tw-prose-invert-code': theme('colors.pink.300'),
-                },
-              },
-            }),
-          },
-        },
-      };
-    </script>
-    
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskFlow AI</title>
   <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
-    "marked": "https://esm.sh/marked@^13.0.2",
-    "date-fns": "https://esm.sh/date-fns@^3.6.0",
-    "vite": "https://esm.sh/vite@^7.1.2",
-    "path": "https://esm.sh/path@^0.12.7",
-    "url": "https://esm.sh/url@^0.11.4",
-    "electron": "https://esm.sh/electron@^37.2.6",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
-    "electron-store": "https://esm.sh/electron-store@^10.1.0",
-    "idb": "https://esm.sh/idb@^8.0.3",
-    "better-sqlite3": "https://esm.sh/better-sqlite3@^12.2.0",
-    "uuid": "https://esm.sh/uuid@^10.0.0",
-    "uuid/": "https://esm.sh/uuid@^10.0.0/",
-    "xlsx": "https://esm.sh/xlsx-js-style@^1.2.0",
-    "react-icons/fa": "https://esm.sh/react-icons@5.2.1/fa",
-    "react-icons/hi2": "https://esm.sh/react-icons@5.2.1/hi2",
-    "react-icons/tb": "https://esm.sh/react-icons@5.2.1/tb",
-    "react-icons/": "https://esm.sh/react-icons@^5.5.0/",
-    "@google/generative-ai": "https://esm.sh/@google/generative-ai@^0.24.1",
-    "@xenova/transformers": "https://esm.sh/@xenova/transformers@^2.17.2",
-    "sqlite-vec": "https://esm.sh/sqlite-vec@^0.1.7-alpha.2",
-    "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
+  {
+    "imports": {
+      "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+      "@google/genai": "https://aistudiocdn.com/@google/genai@^1.15.0",
+      "react/": "https://aistudiocdn.com/react@^19.1.1/",
+      "react": "https://aistudiocdn.com/react@^19.1.1",
+      "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
+      "react-icons/": "https://aistudiocdn.com/react-icons@^5.5.0/",
+      "path": "https://aistudiocdn.com/path@^0.12.7",
+      "vite": "https://aistudiocdn.com/vite@^7.1.3",
+      "marked": "https://aistudiocdn.com/marked@^16.2.0",
+      "url": "https://aistudiocdn.com/url@^0.11.4",
+      "uuid": "https://aistudiocdn.com/uuid@^11.1.0",
+      "electron": "https://aistudiocdn.com/electron@^37.3.1",
+      "idb": "https://aistudiocdn.com/idb@^8.0.3",
+      "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+      "better-sqlite3": "https://aistudiocdn.com/better-sqlite3@^12.2.0",
+      "date-fns/": "https://aistudiocdn.com/date-fns@^3.6.0/",
+      "date-fns": "https://aistudiocdn.com/date-fns@^3.6.0",
+      "os": "https://aistudiocdn.com/os@^0.1.2",
+      "@xenova/transformers": "https://aistudiocdn.com/@xenova/transformers@^2.17.2",
+      "sqlite-vec": "https://aistudiocdn.com/sqlite-vec@^0.1.7-alpha.2",
+      "@google/generative-ai": "https://aistudiocdn.com/@google/generative-ai@^0.24.1"
+    }
   }
-}
-</script>
-<script type="module" src="/index.tsx"></script>
-<link rel="stylesheet" href="/index.css">
+  </script>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            page: 'hsl(var(--color-page, 220 20% 98%))',
+            container: 'hsl(var(--color-container, 220 16% 96%))',
+            card: 'hsl(var(--color-card, 0 0% 100%))',
+
+            'page-dark': 'hsl(var(--color-page-dark, 222 47% 8%))',
+            'container-dark': 'hsl(var(--color-container-dark, 222 47% 11%))',
+            'card-dark': 'hsl(var(--color-card-dark, 222 47% 15%))',
+
+            primary: {
+              DEFAULT: 'hsl(var(--color-primary, 255 96% 70%))',
+              light: 'hsl(var(--color-primary-light, 255 96% 76%))',
+              dark: 'hsl(var(--color-primary-dark, 262 84% 59%))',
+            },
+            secondary: '#10B981',
+            accent: '#EC4899',
+
+            // Legacy colors, map to new ones
+            'brand-light': 'hsl(var(--color-page, 220 20% 98%))',
+            'sidebar-light': 'hsl(var(--color-container, 220 16% 96%))',
+            'card-light': 'hsl(var(--color-card, 0 0% 100%))',
+            'brand-dark': 'hsl(var(--color-page-dark, 222 47% 8%))',
+            'sidebar-dark': 'hsl(var(--color-container-dark, 222 47% 11%))',
+          },
+          keyframes: {
+            'fade-in': {
+              '0%': { opacity: '0', transform: 'translateY(-10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            'fade-in-overlay': {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            'scale-in': {
+              '0%': { opacity: '0', transform: 'scale(0.95)' },
+              '100%': { opacity: '1', transform: 'scale(1)' },
+            },
+            'slide-in-right': {
+              '0%': { transform: 'translateX(100%)', opacity: '0' },
+              '100%': { transform: 'translateX(0)', opacity: '1' },
+            },
+            'aurora': {
+              'from': { backgroundPosition: '50% 50%, 50% 50%' },
+              'to': { backgroundPosition: '350% 50%, 350% 50%' },
+            },
+            'pulse-subtle': {
+              '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+              '50%': { transform: 'scale(1.02)', opacity: '0.95' },
+            }
+          },
+          animation: {
+            'fade-in': 'fade-in 0.5s ease-out forwards',
+            'fade-in-overlay': 'fade-in-overlay 0.3s ease-out forwards',
+            'scale-in': 'scale-in 0.2s ease-out forwards',
+            'slide-in-right': 'slide-in-right 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
+            'aurora': 'aurora 60s linear infinite',
+            'pulse-subtle': 'pulse-subtle 3s ease-in-out infinite',
+          },
+          typography: (theme) => ({
+            DEFAULT: {
+              css: {
+                a: {
+                  color: theme('colors.primary.DEFAULT'),
+                  '&:hover': {
+                    color: theme('colors.primary.dark'),
+                  },
+                },
+                'h1, h2, h3, h4': {
+                  color: theme('colors.gray.900'),
+                },
+                '--tw-prose-body': theme('colors.gray[700]'),
+                '--tw-prose-headings': theme('colors.gray[900]'),
+                '--tw-prose-lead': theme('colors.gray[600]'),
+                '--tw-prose-links': theme('colors.primary[600]'),
+                '--tw-prose-bold': theme('colors.gray[900]'),
+                '--tw-prose-counters': theme('colors.gray[500]'),
+                '--tw-prose-bullets': theme('colors.gray[300]'),
+                '--tw-prose-hr': theme('colors.gray[200]'),
+                '--tw-prose-quotes': theme('colors.gray[900]'),
+                '--tw-prose-quote-borders': theme('colors.gray[200]'),
+                '--tw-prose-captions': theme('colors.gray[500]'),
+                '--tw-prose-code': theme('colors.gray[900]'),
+                '--tw-prose-pre-code': theme('colors.gray[200]'),
+                '--tw-prose-pre-bg': theme('colors.gray[800]'),
+                '--tw-prose-th-borders': theme('colors.gray[300]'),
+                '--tw-prose-td-borders': theme('colors.gray[200]'),
+                '--tw-prose-invert-body': theme('colors.gray[300]'),
+                '--tw-prose-invert-headings': theme('colors.white'),
+                '--tw-prose-invert-lead': theme('colors.gray[400]'),
+                '--tw-prose-invert-links': theme('colors.primary[400]'),
+                '--tw-prose-invert-bold': theme('colors.white'),
+                '--tw-prose-invert-counters': theme('colors.gray[400]'),
+                '--tw-prose-invert-bullets': theme('colors.gray[600]'),
+                '--tw-prose-invert-hr': theme('colors.gray[700]'),
+                '--tw-prose-invert-quotes': theme('colors.gray[100]'),
+                '--tw-prose-invert-quote-borders': theme('colors.gray[700]'),
+                '--tw-prose-invert-captions': theme('colors.gray[400]'),
+                '--tw-prose-invert-code': theme('colors.white'),
+                '--tw-prose-invert-pre-code': theme('colors.gray[300]'),
+                '--tw-prose-invert-pre-bg': theme('colors.gray[900]'),
+              },
+            },
+          }),
+        },
+      },
+    }
+  </script>
+  <style>
+    /* Sets default text colors to prevent visibility issues. */
+    body {
+      color: #1f2937;
+      /* text-gray-800 */
+    }
+
+    html.dark body {
+      /* ThemeProvider puts .dark on <html> */
+      color: #e5e7eb;
+      /* text-gray-200 */
+    }
+
+    /* Custom scrollbar styles */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: theme('colors.gray.300');
+      border-radius: 4px;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background-color: theme('colors.gray.600');
+    }
+
+    /* Fix for contentEditable placeholder */
+    [contenteditable][data-placeholder]:empty:before {
+      content: attr(data-placeholder);
+      pointer-events: none;
+      display: block;
+      /* For Firefox */
+      color: theme('colors.gray.400');
+    }
+
+    .dark [contenteditable][data-placeholder]:empty:before {
+      color: theme('colors.gray.500');
+    }
+  </style>
 </head>
-  <body class="bg-page dark:bg-page-dark font-sans text-gray-800 dark:text-gray-200 overflow-hidden h-full">
-    <div class="absolute top-0 left-0 -z-10 h-full w-full bg-white dark:bg-page-dark overflow-hidden">
-        <div class="absolute bottom-auto left-auto right-0 top-0 h-[500px] w-[500px] -translate-x-[20%] translate-y-[10%] rounded-full bg-[rgba(139,100,253,0.2)] opacity-50 blur-[120px]"></div>
-        <div class="absolute bottom-0 right-auto left-0 h-[400px] w-[600px] -translate-x-[10%] translate-y-[30%] rounded-full bg-[rgba(16,185,129,0.1)] opacity-50 blur-[120px]"></div>
-    </div>
-    <div id="root" class="h-full"></div>
-  </body>
+
+<body class="h-full bg-page dark:bg-page-dark">
+  <div id="root" class="h-full"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

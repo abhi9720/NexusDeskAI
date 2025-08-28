@@ -1,11 +1,11 @@
 import { openDB, IDBPDatabase } from 'idb';
 
 const DB_NAME = 'TaskFlowAI';
-const DB_VERSION = 6; // Incremented version to trigger upgrade
+const DB_VERSION = 8; // Incremented version to trigger upgrade
 const COLLECTIONS = [
-  'List', 'Task', 'Note', 'SavedFilter', 'StickyNote', 
+  'List', 'Task', 'Note', 'SavedFilter', 'StickyNote', 'StickyNoteBoard',
   'ChatSession', 'Goal', 'CustomFieldDefinition', 'UserStats',
-  'Habit', 'HabitLog', 'CustomReminder'
+  'Habit', 'HabitLog', 'CustomReminder', 'StickyNoteLink'
 ];
 const SETTINGS_STORE = 'settings';
 

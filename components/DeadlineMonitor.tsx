@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Task, Status } from '../types';
 import { ExclamationTriangleIcon } from './icons';
+// FIX: Import 'startOfDay' from its submodule 'date-fns/startOfDay'.
 import { formatDistanceToNow, isPast, isToday, addDays, isWithinInterval, differenceInDays } from 'date-fns';
 import startOfDay from 'date-fns/startOfDay';
 

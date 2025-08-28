@@ -39,8 +39,6 @@ app.whenReady().then(() => {
 
     createWindow();
     setupIpcHandlers(Notification);
-    // searchHybrid("Show my high-priority tasks about Apollo which has due date in next 5 days").then(result => console.log("- ---->", result));
-
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();

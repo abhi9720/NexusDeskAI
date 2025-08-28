@@ -1,10 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// FIX: Updated to use the recommended @google/genai SDK and conform to modern API usage guidelines.
+import { GoogleGenAI } from "@google/genai";
 import {db, embedder} from './electronDBHelpers.js';
-const genAI = new GoogleGenerativeAI("AIzaSyD7an3fksZlbqAzOaISmcjqAaL0fBCx3XI");
-const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
-});
+// FIX: Use GoogleGenAI with API key from environment variables as per guidelines, instead of hardcoding and using the deprecated GoogleGenerativeAI constructor.
+const genAI = new GoogleGenAI({apiKey: process.env.API_KEY});
 
 
 export async function parseQuery(query) {
@@ -46,10 +44,17 @@ export async function parseQuery(query) {
 
         Now parse: "${query}"
         `;
-
-    const res = await model.generateContent(prompt);
+    
+    // FIX: Use `generateContent` with model name and prompt as per guidelines. Replaced deprecated `getGenerativeModel` and `generateContent` on model.
+    // FIX: Updated model from prohibited 'gemini-1.5-flash' to 'gemini-2.5-flash'.
+    const res = await genAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+    });
     try {
-        return JSON.parse(res.response.text());
+        // FIX: Extract text from response using `.text` property directly, instead of deprecated `.response.text()`.
+        return JSON.parse(res.text);
     } catch {
         return { type: "semantic", filters: [], search_terms: query };
     }

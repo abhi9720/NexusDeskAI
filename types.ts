@@ -62,13 +62,34 @@ export interface SavedFilter {
   filter: TaskFilter;
 }
 
+export interface StickyNoteBoard {
+    id: number;
+    name: string;
+    createdAt: string;
+}
+
 export interface StickyNote {
     id: number;
+    boardId: number;
     title: string;
     content: string;
     color: string;
     position: { x: number; y: number };
     size: { width: number; height: number };
+}
+
+export type ConnectorStyle = 'straight' | 'elbow' | 'curved';
+export type ConnectorEndStyle = 'arrow' | 'dot' | 'none';
+
+export interface StickyNoteLink {
+  id: number;
+  boardId: number;
+  startNoteId: number | null;
+  endNoteId: number | null;
+  startPosition?: { x: number; y: number };
+  endPosition?: { x: number; y: number };
+  style: ConnectorStyle;
+  endStyle: ConnectorEndStyle;
 }
 
 // --- New Goal Tracking Types ---
@@ -98,23 +119,38 @@ export interface Goal {
   journal: JournalEntry[];
 }
 
-// --- New Habit Tracking Types ---
+// --- New Habit Tracking Types (Updated) ---
+export type HabitType = 'binary' | 'quantitative';
+export type HabitFrequency = 'daily' | 'weekly' | 'x_times_per_week';
+
 export interface Habit {
   id: number;
   name: string;
-  icon: string; // Icon name from react-icons
+  icon: string;
   color: string;
-  frequency: 'daily' | 'weekly';
-  targetDays?: number[]; // for weekly, e.g., [1, 3, 5] for Mon, Wed, Fri (0=Sun, 6=Sat)
-  reminderTime?: string | null; // e.g., "09:00"
   createdAt: string;
+  isArchived: boolean;
+  
+  type: HabitType;
+  goalValue?: number;
+  goalUnit?: string;
+  
+  frequency: HabitFrequency;
+  // For 'weekly'
+  targetDays?: number[]; // [0-6] for Sun-Sat
+  // For 'x_times_per_week'
+  frequencyValue?: number;
+
+  reminderTime?: string | null;
 }
 
 export interface HabitLog {
   id: number;
   habitId: number;
-  date: string; // YYYY-MM-DD ISO date string (e.g., 2023-10-27)
+  date: string; // YYYY-MM-DD
+  completedValue?: number; // 1 for binary, actual value for quantitative
 }
+
 
 // --- New Reminder Type ---
 export interface CustomReminder {
@@ -225,6 +261,8 @@ export interface Task {
   activityLog: ActivityLog[];
   customFields: { [fieldId: number]: any }; // For string, number, date string, optionId, or boolean
   linkedNoteIds?: number[];
+  dependencyIds?: number[]; // IDs of tasks that must be completed before this one
+  blockingIds?: number[]; // IDs of tasks that this task blocks
 }
 
 export interface Note {

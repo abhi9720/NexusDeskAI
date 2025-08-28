@@ -1,50 +1,68 @@
 import React, { useMemo } from 'react';
 import { Task, Status, Priority } from '../types';
-import { ClockIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon, CrosshairIcon } from './icons';
-import { isToday, isTomorrow, isPast, format } from 'date-fns';
+import { ClockIcon, ChatBubbleLeftEllipsisIcon, PaperClipIcon, ListBulletIcon, CrosshairIcon, FlagIcon, LockClosedIcon } from './icons';
+import { isToday, isTomorrow, isPast, format, differenceInDays } from 'date-fns';
 
 interface TaskListViewProps {
     tasks: Task[];
+    allTasks: Task[];
     onSelectTask: (task: Task) => void;
     groupBy: 'default' | 'priority' | 'status' | 'tag';
     onStartFocus: (task: Task) => void;
 }
 
-const formatDateSafely = (dateString: string | undefined | null, formatStr: string): string => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-        return 'Invalid Date';
+const formatDueDate = (dueDateString: string) => {
+    const date = new Date(dueDateString);
+    if (isNaN(date.getTime())) return { text: 'No date', color: 'text-gray-500' };
+
+    if (isToday(date)) return { text: 'Today', color: 'text-primary font-semibold' };
+    if (isTomorrow(date)) return { text: 'Tomorrow', color: 'text-blue-500 font-semibold' };
+    if (isPast(date)) {
+        const daysOverdue = differenceInDays(new Date(), date);
+        if (daysOverdue === 0) return { text: 'Yesterday', color: 'text-red-500 font-semibold' };
+        return { text: `${daysOverdue}d overdue`, color: 'text-red-500 font-semibold' };
     }
-    return format(date, formatStr);
+    return { text: format(date, 'MMM d'), color: 'text-gray-500 dark:text-gray-400' };
 };
 
-const priorityColors: Record<Priority, { dot: string, text: string }> = {
-    [Priority.High]: { dot: 'bg-red-500', text: 'text-red-500' },
-    [Priority.Medium]: { dot: 'bg-yellow-500', text: 'text-yellow-500' },
-    [Priority.Low]: { dot: 'bg-green-500', text: 'text-green-500' },
+const priorityStyles: Record<Priority, { bg: string, text: string, icon: JSX.Element }> = {
+    [Priority.High]: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-200', icon: <FlagIcon className="w-3.5 h-3.5 text-red-500" /> },
+    [Priority.Medium]: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-200', icon: <FlagIcon className="w-3.5 h-3.5 text-yellow-500" /> },
+    [Priority.Low]: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-200', icon: <FlagIcon className="w-3.5 h-3.5 text-green-500" /> },
 };
 
-const TaskListItem = ({ task, onSelect, onStartFocus }: { task: Task; onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
-    const dueDate = new Date(task.dueDate);
-    const isDueDateValid = !isNaN(dueDate.getTime());
-    const isOverdue = isDueDateValid && isPast(dueDate) && !isToday(dueDate) && task.status !== Status.Done;
+const TaskListItem = ({ task, allTasks, onSelect, onStartFocus }: { task: Task; allTasks: Task[]; onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
+    const dueDateInfo = formatDueDate(task.dueDate);
+    const priorityStyle = priorityStyles[task.priority];
+
+    const isBlocked = useMemo(() => {
+        if (!task.dependencyIds || task.dependencyIds.length === 0) {
+            return false;
+        }
+        return task.dependencyIds.some(depId => {
+            const dependency = allTasks.find(t => t.id === depId);
+            return dependency && dependency.status !== Status.Done;
+        });
+    }, [task.dependencyIds, allTasks]);
 
     return (
         <div onClick={() => onSelect(task)} className="flex items-start p-3 pl-4 border-b border-gray-200 dark:border-gray-700/60 hover:bg-gray-100/50 dark:hover:bg-gray-800/40 group cursor-pointer" >
             <div className="flex-grow">
                 <p className={`text-gray-800 dark:text-gray-100 ${task.status === Status.Done ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{task.title}</p>
-                <div className="flex items-center text-xs space-x-3 text-gray-500 dark:text-gray-400 mt-1">
-                     <span className={`flex items-center space-x-1 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
-                        <ClockIcon className="w-3.5 h-3.5" />
-                        <span>{formatDateSafely(task.dueDate, 'MMM d')}</span>
+                 <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {isBlocked && (
+                        <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400" title="This task is blocked by other tasks.">
+                            <LockClosedIcon className="w-4 h-4" />
+                        </div>
+                     )}
+                     <span className={`flex items-center space-x-1.5 ${dueDateInfo.color}`}>
+                        <ClockIcon className="w-4 h-4" />
+                        <span>{dueDateInfo.text}</span>
                     </span>
-                    <div className="flex items-center space-x-1">
-                        <span className={`w-2 h-2 rounded-full ${priorityColors[task.priority].dot}`}></span>
+                    <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full font-semibold ${priorityStyle.bg} ${priorityStyle.text}`}>
+                        {priorityStyle.icon}
                         <span>{task.priority}</span>
-                    </div>
-                </div>
-                 <div className="flex items-center space-x-4 text-xs text-gray-400 dark:text-gray-500 mt-2">
+                    </span>
                     {task.comments?.length > 0 && (
                         <div className="flex items-center gap-1">
                             <ChatBubbleLeftEllipsisIcon className="w-4 h-4" />
@@ -78,20 +96,20 @@ const TaskListItem = ({ task, onSelect, onStartFocus }: { task: Task; onSelect: 
     );
 };
 
-const TaskListGroup = ({ title, tasks, onSelect, onStartFocus }: { title: string, tasks: Task[], onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
+const TaskListGroup = ({ title, tasks, allTasks, onSelect, onStartFocus }: { title: string, tasks: Task[], allTasks: Task[], onSelect: (task: Task) => void; onStartFocus: (task: Task) => void; }) => {
     if (tasks.length === 0) return null;
     return (
         <div className="mb-4">
             <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 px-4 py-2">{title}</h3>
             {tasks.map(task => (
-                <TaskListItem key={task.id} task={task} onSelect={onSelect} onStartFocus={onStartFocus} />
+                <TaskListItem key={task.id} task={task} allTasks={allTasks} onSelect={onSelect} onStartFocus={onStartFocus} />
             ))}
         </div>
     )
 };
 
 
-const TaskListView = ({ tasks, onSelectTask, groupBy, onStartFocus }: TaskListViewProps) => {
+const TaskListView = ({ tasks, allTasks, onSelectTask, groupBy, onStartFocus }: TaskListViewProps) => {
 
     const groupedTasks = useMemo(() => {
         if (groupBy === 'priority') {
@@ -175,6 +193,7 @@ const TaskListView = ({ tasks, onSelectTask, groupBy, onStartFocus }: TaskListVi
                         key={groupKey}
                         title={title} 
                         tasks={tasksInGroup} 
+                        allTasks={allTasks}
                         onSelect={onSelectTask} 
                         onStartFocus={onStartFocus}
                     />

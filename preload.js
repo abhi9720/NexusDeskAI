@@ -9,5 +9,4 @@ contextBridge.exposeInMainWorld('desktopStorage', {
     saveAttachment: (file) => ipcRenderer.invoke('save-attachment', file),
     searchHybrid: (query) => ipcRenderer.invoke('db:searchHybrid', query),
     sendNotification: (options) => ipcRenderer.send('show-notification', options)
-
 });

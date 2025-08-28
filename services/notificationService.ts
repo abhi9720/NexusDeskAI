@@ -1,6 +1,8 @@
 import { Task, Goal, Status, Habit, CustomReminder, HabitLog } from '../types';
 import { getMotivationalNudge } from './geminiService';
-import { isToday, isPast, format } from 'date-fns';
+// FIX: Import 'isPast' from its submodule to fix module not found error.
+// FIX: Consolidate `isPast` import with other `date-fns` imports to resolve module resolution error.
+import { isToday, format, isPast } from 'date-fns';
 import { isDesktop } from './storageService';
 
 const NUDGE_COOLDOWN = 4 * 60 * 60 * 1000; // 4 hours

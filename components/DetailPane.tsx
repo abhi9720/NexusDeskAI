@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Task, Note, TaskAnalysis, NoteAnalysis, Priority, Status, Attachment, ChecklistItem, Comment, CustomFieldDefinition, List, ActivityLog, ActivityType } from '../types';
-import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon, CrosshairIcon, ChatBubbleLeftEllipsisIcon, DocumentTextIcon, MagnifyingGlassIcon, BellIcon } from './icons';
+import { XMarkIcon, SparklesIcon, TrashIcon, ClockIcon, PaperClipIcon, PencilIcon, PlusIcon, TagIcon, CheckIcon, UserCircleIcon, FullScreenIcon, ExitFullScreenIcon, FlagIcon, CalendarDaysIcon, CrosshairIcon, ChatBubbleLeftEllipsisIcon, DocumentTextIcon, MagnifyingGlassIcon, BellIcon, LinkIcon, LockClosedIcon } from './icons';
 import { analyzeTaskAndSuggestSubtasks, summarizeAndTagNote, suggestTaskPriority, assistWriting } from '../services/geminiService';
 import { format, isPast, isToday, formatDistanceToNow } from 'date-fns';
 import { fileService } from '../services/storageService';
@@ -43,6 +43,15 @@ const priorityColors: Record<Priority, string> = {
   [Priority.High]: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
   [Priority.Medium]: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200',
   [Priority.Low]: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200',
+};
+
+const statusDisplayConfig: Record<Status, { color: string; textColor: string }> = {
+    [Status.Backlog]: { color: 'bg-gray-200 dark:bg-gray-600', textColor: 'text-gray-800 dark:text-gray-200' },
+    [Status.ToDo]: { color: 'bg-blue-200 dark:bg-blue-800', textColor: 'text-blue-800 dark:text-blue-200' },
+    [Status.InProgress]: { color: 'bg-yellow-200 dark:bg-yellow-700', textColor: 'text-yellow-800 dark:text-yellow-100' },
+    [Status.Review]: { color: 'bg-purple-200 dark:bg-purple-800', textColor: 'text-purple-800 dark:text-purple-200' },
+    [Status.Waiting]: { color: 'bg-slate-200 dark:bg-slate-700', textColor: 'text-slate-800 dark:text-slate-200' },
+    [Status.Done]: { color: 'bg-green-200 dark:bg-green-800', textColor: 'text-green-800 dark:text-green-200' },
 };
 
 const AttachmentDisplay = ({ attachment, onRemove, isPreview }: { attachment: Attachment, onRemove?: (id: number) => void, isPreview: boolean }) => {
@@ -160,7 +169,7 @@ interface DetailPaneProps {
   list?: List;
   onClose: () => void;
   onUpdate: (item: Task | Note) => void;
-  onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => void;
+  onAddItem: (item: Partial<Task & Note>, listId: number, type: 'task' | 'note') => Promise<Task | Note>;
   onDelete: (itemId: number, type: 'task' | 'note') => void;
   onAddComment: (taskId: number, content: string) => void;
   onStartFocus: (task: Task) => void;
@@ -170,10 +179,11 @@ interface DetailPaneProps {
   listIdToAdd?: number;
   isSidebarCollapsed: boolean;
   allNotes: Note[];
+  allTasks: Task[];
   onDetailItemChange: (item: Task | Note | null) => void;
 }
 
-const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddComment, onStartFocus, onStartSubtaskFocus, customFieldDefinitions, itemTypeToAdd, listIdToAdd, isSidebarCollapsed, allNotes, onDetailItemChange }: DetailPaneProps) => {
+const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddComment, onStartFocus, onStartSubtaskFocus, customFieldDefinitions, itemTypeToAdd, listIdToAdd, isSidebarCollapsed, allNotes, allTasks, onDetailItemChange }: DetailPaneProps) => {
     const isAdding = !item;
 
     const [isEditing, setIsEditing] = useState(isAdding);
@@ -203,6 +213,8 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
                 activityLog: [],
                 customFields: {},
                 linkedNoteIds: [],
+                dependencyIds: [],
+                blockingIds: [],
             } as Task;
         } else { // Note
             return {
@@ -224,6 +236,10 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
     const [noteLinkSearch, setNoteLinkSearch] = useState('');
+    const [dependencySearch, setDependencySearch] = useState('');
+    const [isDepDropdownOpen, setIsDepDropdownOpen] = useState(false);
+    const depDropdownRef = useRef<HTMLDivElement>(null);
+
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -236,10 +252,17 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
             setActiveTab('comments');
         }
     }, [item]);
+
+     useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (depDropdownRef.current && !depDropdownRef.current.contains(event.target as Node)) {
+                setIsDepDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
     
-    // Determine the type of the item being displayed or added.
-    // This is the crucial fix: it uses the `item` prop for view mode to avoid using stale state,
-    // and falls back to the `editedItem` for add mode.
     const currentDisplayItem = isAdding ? editedItem : item;
     const isTask = !!currentDisplayItem && 'status' in currentDisplayItem;
 
@@ -273,6 +296,39 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
             note.title.toLowerCase().includes(lowercasedSearch)
         );
     }, [allNotes, noteLinkSearch]);
+
+    const { dependencies: editModeDependencies, blocking: editModeBlocking, availableTasksForDependency } = useMemo(() => {
+        if (!isTask || !(isEditing || isAdding)) {
+            return { dependencies: [], blocking: [], availableTasksForDependency: [] };
+        }
+        const currentTask = editedItem as Task;
+        const deps = (currentTask.dependencyIds || []).map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+        const blocks = (currentTask.blockingIds || []).map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+
+        const existingIds = new Set([
+            currentTask.id,
+            ...(currentTask.dependencyIds || []),
+            ...(currentTask.blockingIds || [])
+        ]);
+
+        const available = allTasks.filter(t =>
+            !existingIds.has(t.id) &&
+            t.title.toLowerCase().includes(dependencySearch.toLowerCase())
+        );
+        
+        return { dependencies: deps, blocking: blocks, availableTasksForDependency: available };
+
+    }, [isTask, isEditing, isAdding, editedItem, allTasks, dependencySearch]);
+
+    const dependencies = useMemo(() => {
+        if (!item || !isTask || !(item as Task).dependencyIds) return [];
+        return (item as Task).dependencyIds!.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+    }, [item, allTasks, isTask]);
+
+    const blocking = useMemo(() => {
+        if (!item || !isTask || !(item as Task).blockingIds) return [];
+        return (item as Task).blockingIds!.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+    }, [item, allTasks, isTask]);
 
     const handleAnalyze = async () => {
         setIsAnalyzing(true);
@@ -324,7 +380,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
             const taskAnalysis = analysis as TaskAnalysis;
             const currentTask = item as Task;
 
-            const analysisText = `\n\n<hr>\n<h3>AI Analysis</h3>\n<p><strong>Summary:</strong> ${taskAnalysis.summary}</p>\n<p><strong>Complexity:</strong> ${taskAnalysis.complexity}</p>\n<p><strong>Skills Required:</strong> ${taskAnalysis.requiredSkills.join(', ')}</p>`;
+            const analysisText = `\n\n<hr>\n<h3>AI Analysis</h3>\n<p><strong>Summary:</strong> ${taskAnalysis.summary}</p>\n<p><strong>Complexity:</strong> ${taskAnalysis.complexity}</p>\n<p><strong>Skills Required:</strong> ${taskAnalysis.requiredSkills.join(', ')}</p>\n<p><strong>Potential Blockers:</strong> ${taskAnalysis.potentialBlockers.join(', ')}</p>`;
             
             const newChecklistItems: ChecklistItem[] = taskAnalysis.subtasks.map(sub => ({
                 id: newId(),
@@ -358,7 +414,7 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
     };
 
 
-    const handleSaveChanges = () => {
+    const handleSaveChanges = async () => {
         if (!editedItem.title.trim()) {
             alert("Title cannot be empty.");
             return;
@@ -373,7 +429,8 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
 
         if (isAdding) {
             const { id, createdAt, ...newItemData } = finalItem as any; // remove temporary/unwanted fields
-            onAddItem(newItemData, listIdToAdd!, itemTypeToAdd!);
+            await onAddItem(newItemData, listIdToAdd!, itemTypeToAdd!);
+            onClose();
         } else {
             onUpdate(finalItem as Task | Note);
             setIsEditing(false);
@@ -495,6 +552,13 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
     };
 
     const renderViewMode = () => {
+        if (!item) return null;
+        
+        const checklistItems = isTask ? (item as Task).checklist : [];
+        const completedItems = checklistItems.filter(i => i.completed).length;
+        const totalItems = checklistItems.length;
+        const progressPercentage = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+
         return (
             <div className="p-6 space-y-6">
                 <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-3 text-sm border-b border-gray-200 dark:border-gray-700 pb-4 items-center">
@@ -544,9 +608,9 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
                             ))}
                         </MetadataItem>
                     )}
-                    {isTask && applicableFields.map(field => {
+                    {isTask && applicableFields.flatMap(field => {
                         const value = (item as Task).customFields?.[field.id];
-                        if (value === undefined || value === null || value === '') return null;
+                        if (value === undefined || value === null || value === '') return [];
 
                         const getDisplayValue = () => {
                             switch (field.type) {
@@ -561,18 +625,35 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
                                     return String(value);
                             }
                         };
-
-                        return (
-                            <MetadataItem key={field.id} icon={<div className="w-4 h-4"></div>} label={field.name}>
+                        
+                        return [
+                            <div key={`${field.id}-label`} className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
+                                <div className="w-4 h-4"></div>
+                                <span>{field.name}</span>
+                            </div>,
+                            <div key={`${field.id}-value`} className="text-gray-800 dark:text-white font-medium flex flex-wrap gap-1 items-center">
                                 <span>{getDisplayValue()}</span>
-                            </MetadataItem>
-                        )
+                            </div>
+                        ];
                     })}
                 </div>
                 
                 {(isTask ? (item as Task).description : (item as Note).content) && (
                     <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{__html: isTask ? (item as Task).description : marked.parse((item as Note).content, { gfm: true, breaks: true }) as string}} />
                 )}
+
+                {isTask && totalItems > 0 && (
+                    <div>
+                        <div className="flex justify-between items-center text-sm mb-1">
+                            <h3 className="font-semibold text-gray-700 dark:text-gray-300">Subtask Progress</h3>
+                            <span className="text-gray-500 dark:text-gray-400 font-mono">{completedItems}/{totalItems}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                            <div className="bg-primary h-2.5 rounded-full transition-all" style={{width: `${progressPercentage}%`}}></div>
+                        </div>
+                    </div>
+                )}
+
 
                 {isTask && (item as Task).checklist && (item as Task).checklist.length > 0 && (
                     <div>
@@ -618,6 +699,39 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
                     </div>
                 )}
                 
+                {isTask && (dependencies.length > 0 || blocking.length > 0) && (
+                    <div>
+                        <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Task Dependencies</h3>
+                        {dependencies.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><LinkIcon className="w-4 h-4" /> Prerequisites <span className="text-xs">(must be completed first)</span></h4>
+                                <div className="space-y-2">
+                                    {dependencies.map(dep => (
+                                        <button key={dep.id} onClick={() => onDetailItemChange(dep)} className="w-full text-left flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600/50">
+                                            <span className={`text-sm ${dep.status === Status.Done ? 'line-through text-gray-500' : ''}`}>{dep.title}</span>
+                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusDisplayConfig[dep.status].color} ${statusDisplayConfig[dep.status].textColor}`}>
+                                                {dep.status}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {blocking.length > 0 && (
+                            <div>
+                                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><LockClosedIcon className="w-4 h-4" /> Blocking <span className="text-xs">(depends on this task)</span></h4>
+                                <div className="space-y-2">
+                                    {blocking.map(b => (
+                                        <button key={b.id} onClick={() => onDetailItemChange(b)} className="w-full text-left flex items-center p-2 bg-gray-100 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600/50">
+                                             <span className="text-sm">{b.title}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {(analysis || isAnalyzing || error) && (
                     <div className="bg-gray-100/80 dark:bg-black/20 p-4 rounded-lg mt-4">
                         {isAnalyzing && <div className="text-center p-8"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div></div>}
@@ -638,16 +752,36 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
                                         </div>
                                     )}
                                     {isTask && (
-                                        <>
-                                            <p><strong>Complexity:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).complexity}</span></p>
-                                            <p><strong>Skills:</strong> <span className="text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).requiredSkills.join(', ')}</span></p>
+                                        <div className="space-y-4">
                                             <div>
-                                                <h4 className="font-semibold mt-2 mb-2">Suggested Subtasks:</h4>
-                                                <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300">
-                                                    {(analysis as TaskAnalysis).subtasks.map((sub, i) => <li key={i}>{sub.title}</li>)}
+                                                <strong className="text-gray-800 dark:text-gray-100">Complexity:</strong>
+                                                <span className="ml-2 text-gray-600 dark:text-gray-300">{(analysis as TaskAnalysis).complexity}</span>
+                                            </div>
+                                            <div>
+                                                <strong className="text-gray-800 dark:text-gray-100">Required Skills:</strong>
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {(analysis as TaskAnalysis).requiredSkills.map((skill, i) => (
+                                                        <span key={i} className="px-2 py-1 bg-gray-200 dark:bg-gray-700/60 rounded-full text-xs">{skill}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <strong className="text-gray-800 dark:text-gray-100">Potential Blockers:</strong>
+                                                <ul className="list-disc list-inside mt-1 text-gray-600 dark:text-gray-300 pl-4 space-y-1">
+                                                    {(analysis as TaskAnalysis).potentialBlockers.map((blocker, i) => (
+                                                        <li key={i}>{blocker}</li>
+                                                    ))}
                                                 </ul>
                                             </div>
-                                        </>
+                                            <div>
+                                                <h4 className="font-semibold mt-2 mb-2 text-gray-800 dark:text-gray-100">Suggested Subtasks:</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-300 pl-4">
+                                                    {(analysis as TaskAnalysis).subtasks.map((sub, i) => (
+                                                        <li key={i}>{sub.title}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
                                     )}
                                     {!isTask && (
                                         <div>
@@ -719,297 +853,299 @@ const DetailPane = ({ item, list, onClose, onUpdate, onAddItem, onDelete, onAddC
         );
     }
     
-    const renderEditMode = () => (
-         <div className="p-6 h-full flex flex-col gap-4">
-            <div className="flex-grow min-h-0">
-                {isTask ? (
-                    <textarea 
-                        value={(editedItem as Task).description} 
-                        onChange={e => handleFieldChange('description', e.target.value)} 
-                        className="w-full h-full form-textarea rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary resize-none"
-                        placeholder="Add a description..."
-                    />
-                ) : (
-                    <RichTextEditor
-                        value={(editedItem as Note).content}
-                        onChange={(newContent) => handleFieldChange('content', newContent)}
-                        onAiAssist={handleImproveNoteContent}
-                        isAiLoading={isImproving}
-                        placeholder="Start writing your note..."
-                    />
-                )}
-            </div>
-            
-            <div className="flex-shrink-0 overflow-y-auto space-y-4 max-h-[45%] pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
-                    <div className="flex items-center gap-2 mb-2 pb-2 overflow-x-auto">
-                        {(editedItem.attachments || []).map(att => (
-                            <div key={att.id} className="flex-shrink-0 w-32">
-                                <AttachmentDisplay attachment={att} isPreview={false} onRemove={removeAttachment} />
-                            </div>
-                        ))}
-                    </div>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg">
-                        <PaperClipIcon className="w-4 h-4" />
-                        Attach File
-                    </button>
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="*"
-                        multiple
-                        onChange={handleFileChange}
-                        className="hidden"
-                    />
-                </div>
+    const renderEditMode = () => {
+        const currentTask = editedItem as Task;
+        
+        const handleAddDependency = (depId: number) => {
+            const newDeps = [...(currentTask.dependencyIds || []), depId];
+            handleFieldChange('dependencyIds', newDeps);
+            setIsDepDropdownOpen(false);
+            setDependencySearch('');
+        };
 
-                {isTask && (
+        const handleRemoveDependency = (depId: number) => {
+            const newDeps = (currentTask.dependencyIds || []).filter(id => id !== depId);
+            handleFieldChange('dependencyIds', newDeps);
+        };
+
+
+        return (
+            <div className="p-6 h-full flex flex-col gap-4">
+                <div className="flex-grow min-h-0">
+                    {isTask ? (
+                        <textarea 
+                            value={(editedItem as Task).description} 
+                            onChange={e => handleFieldChange('description', e.target.value)} 
+                            className="w-full h-full form-textarea rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary resize-none"
+                            placeholder="Add a description..."
+                        />
+                    ) : (
+                        <RichTextEditor
+                            value={(editedItem as Note).content}
+                            onChange={(newContent) => handleFieldChange('content', newContent)}
+                            onAiAssist={handleImproveNoteContent}
+                            isAiLoading={isImproving}
+                            placeholder="Start writing your note..."
+                        />
+                    )}
+                </div>
+                
+                <div className="flex-shrink-0 overflow-y-auto space-y-4 max-h-[45%] pt-4 border-t border-gray-200 dark:border-gray-700">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Checklist</label>
-                        <div className="space-y-2">
-                            {(editedItem as Task).checklist.map(ci => (
-                                <div key={ci.id} className="flex items-center space-x-2 group">
-                                    <input type="checkbox" checked={ci.completed} onChange={() => handleToggleChecklistItem(ci.id, true)} className="h-5 w-5 form-checkbox rounded border-gray-300 text-primary focus:ring-primary" />
-                                    <input type="text" value={ci.text} onChange={e => handleFieldChange('checklist', (editedItem as Task).checklist.map(i => i.id === ci.id ? {...i, text: e.target.value} : i))} className="flex-grow form-input rounded-md bg-transparent border-0 focus:bg-gray-100 dark:focus:bg-gray-700 focus:ring-1 focus:ring-primary"/>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); onStartSubtaskFocus(editedItem as Task, ci); }}
-                                        className="p-1 text-gray-400 hover:text-primary opacity-0 group-hover:opacity-100"
-                                        title="Focus on this subtask"
-                                    >
-                                        <CrosshairIcon className="w-4 h-4" />
-                                    </button>
-                                    <button type="button" onClick={() => handleRemoveChecklistItem(ci.id)} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><TrashIcon className="w-4 h-4" /></button>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
+                        <div className="flex items-center gap-2 mb-2 pb-2 overflow-x-auto">
+                            {(editedItem.attachments || []).map(att => (
+                                <div key={att.id} className="flex-shrink-0 w-32">
+                                    <AttachmentDisplay attachment={att} isPreview={false} onRemove={removeAttachment} />
                                 </div>
                             ))}
-                            <div className="flex items-center space-x-2">
-                                <button type="button" onClick={handleAddChecklistItem} className="p-2 text-gray-400 hover:text-primary"><PlusIcon className="w-4 h-4" /></button>
-                                <input type="text" value={checklistItemText} onChange={e => setChecklistItemText(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddChecklistItem())} placeholder="Add a checklist item..." className="flex-grow form-input bg-transparent border-0 focus:ring-0 p-0"/>
-                            </div>
                         </div>
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg">
+                            <PaperClipIcon className="w-4 h-4" />
+                            Attach File
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="*"
+                            multiple
+                            onChange={handleFileChange}
+                            className="hidden"
+                        />
                     </div>
-                )}
-                
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
-                    <div className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-                        {editedItem.tags.map(tag => (
-                            <span key={tag} className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light text-xs font-semibold rounded-full">
-                                {tag}
-                                <button onClick={() => removeTag(tag)} className="ml-1 text-primary/60 hover:text-primary"><XMarkIcon className="w-3 h-3"/></button>
-                            </span>
-                        ))}
-                        <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleTagKeyDown} placeholder="Add a tag..." className="flex-grow bg-transparent focus:outline-none focus:ring-0 border-none p-0 text-sm"/>
-                    </div>
-                </div>
 
-                {isTask && (
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Linked Notes</label>
-                        <div className="p-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
-                            <div className="relative mb-2">
-                                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                <input
-                                    type="text"
-                                    placeholder="Search notes to link..."
-                                    value={noteLinkSearch}
-                                    onChange={e => setNoteLinkSearch(e.target.value)}
-                                    className="w-full pl-8 pr-2 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-700/50 border-transparent focus:ring-1 focus:ring-primary"
-                                />
-                            </div>
-                            <div className="max-h-48 overflow-y-auto">
-                                {allNotes.length > 0 ? (
-                                    filteredNotesForLinking.length > 0 ? (
-                                        filteredNotesForLinking.map(note => (
-                                            <label key={note.id} className="flex items-center gap-3 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    className="form-checkbox h-4 w-4 rounded text-primary"
-                                                    checked={(editedItem as Task).linkedNoteIds?.includes(note.id)}
-                                                    onChange={(e) => {
-                                                        const currentIds = (editedItem as Task).linkedNoteIds || [];
-                                                        const newIds = e.target.checked
-                                                            ? [...currentIds, note.id]
-                                                            : currentIds.filter(id => id !== note.id);
-                                                        handleFieldChange('linkedNoteIds', newIds);
-                                                    }}
-                                                />
-                                                <span className="text-sm truncate">{note.title}</span>
-                                            </label>
-                                        ))
-                                    ) : (
-                                        <p className="text-xs text-center text-gray-500 p-2">No matching notes found.</p>
-                                    )
-                                ) : (
-                                    <p className="text-xs text-center text-gray-500 p-2">No notes available to link.</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {isTask && (
-                    <div className="grid grid-cols-2 gap-4">
+                    {isTask && (
                         <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-                        <input type="date" value={getValidDateForInput((editedItem as Task).dueDate)} onChange={e => { handleFieldChange('dueDate', e.target.value ? new Date(`${e.target.value}T00:00:00`).toISOString() : '') }} required className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>
-                        </div>
-                        <div>
-                            <div className="flex items-center justify-between mb-1">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
-                                <button
-                                    type="button"
-                                    onClick={handleSuggestPriority}
-                                    disabled={isSuggestingPriority}
-                                    className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 flex items-center gap-1"
-                                >
-                                    <SparklesIcon className="w-3 h-3" />
-                                    {isSuggestingPriority ? "Thinking..." : "Suggest"}
-                                </button>
-                            </div>
-                        <select value={(editedItem as Task).priority} onChange={e => handleFieldChange('priority', e.target.value as Priority)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
-                            {Object.values(Priority).map(p => (<option key={p} value={p}>{p}</option>))}
-                        </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reminder</label>
-                            <input
-                                type="datetime-local"
-                                value={
-                                    (editedItem as Task).reminder
-                                        ? format(new Date((editedItem as Task).reminder!), "yyyy-MM-dd'T'HH:mm")
-                                        : ''
-                                }
-                                onChange={e => handleFieldChange('reminder', e.target.value ? new Date(e.target.value).toISOString() : null)}
-                                className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"
-                            />
-                        </div>
-                        {!isAdding && (
-                            <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                            <select value={(editedItem as Task).status} onChange={e => handleFieldChange('status', e.target.value as Status)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
-                                {statusOptions.map(s => (
-                                    <option key={s.status} value={s.status}>{s.name}</option>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Checklist</label>
+                            <div className="space-y-2">
+                                {(editedItem as Task).checklist.map(ci => (
+                                    <div key={ci.id} className="flex items-center space-x-2 group">
+                                        <input type="checkbox" checked={ci.completed} onChange={() => handleToggleChecklistItem(ci.id, true)} className="h-5 w-5 form-checkbox rounded border-gray-300 text-primary focus:ring-primary" />
+                                        <input type="text" value={ci.text} onChange={e => handleFieldChange('checklist', (editedItem as Task).checklist.map(i => i.id === ci.id ? {...i, text: e.target.value} : i))} className="flex-grow form-input rounded-md bg-transparent border-0 focus:bg-gray-100 dark:focus:bg-gray-700 focus:ring-1 focus:ring-primary"/>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onStartSubtaskFocus(editedItem as Task, ci); }}
+                                            className="p-1 text-gray-400 hover:text-primary opacity-0 group-hover:opacity-100"
+                                            title="Focus on this subtask"
+                                        >
+                                            <CrosshairIcon className="w-4 h-4" />
+                                        </button>
+                                        <button type="button" onClick={() => handleRemoveChecklistItem(ci.id)} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><TrashIcon className="w-4 h-4" /></button>
+                                    </div>
                                 ))}
-                            </select>
+                                <div className="flex items-center space-x-2">
+                                    <button type="button" onClick={handleAddChecklistItem} className="p-2 text-gray-400 hover:text-primary"><PlusIcon className="w-4 h-4" /></button>
+                                    <input type="text" value={checklistItemText} onChange={e => setChecklistItemText(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddChecklistItem())} placeholder="Add a checklist item..." className="flex-grow form-input bg-transparent border-0 focus:ring-0 p-0"/>
+                                </div>
                             </div>
-                        )}
+                        </div>
+                    )}
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
+                        <div className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
+                            {editedItem.tags.map(tag => (
+                                <span key={tag} className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light text-xs font-semibold rounded-full">
+                                    {tag}
+                                    <button onClick={() => removeTag(tag)} className="ml-1 text-primary/60 hover:text-primary"><XMarkIcon className="w-3 h-3"/></button>
+                                </span>
+                            ))}
+                            <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={handleTagKeyDown} placeholder="Add a tag..." className="flex-grow bg-transparent focus:outline-none focus:ring-0 border-none p-0 text-sm"/>
+                        </div>
                     </div>
-                )}
-                {isTask && applicableFields.length > 0 && (
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Custom Fields</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            {applicableFields.map(field => (
-                                <div key={field.id}>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.name}</label>
-                                    {field.type === 'text' && <input type="text" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
-                                    {field.type === 'number' && <input type="number" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
-                                    {field.type === 'date' && <input type="date" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary" />}
-                                    {field.type === 'checkbox' && <input type="checkbox" checked={!!(editedItem as Task).customFields?.[field.id]} onChange={e => handleCustomFieldChange(field.id, e.target.checked)} className="form-checkbox h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary" />}
-                                    {field.type === 'select' && (
-                                        <select value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
-                                            <option value="">Select...</option>
-                                            {field.options?.map(opt => <option key={opt.id} value={opt.id}>{opt.value}</option>)}
-                                        </select>
+
+                    {isTask && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Dependencies</label>
+                            <div className="p-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
+                                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><LinkIcon className="w-3 h-3"/> Prerequisites</h4>
+                                {editModeDependencies.map(dep => (
+                                    <div key={dep.id} className="flex items-center justify-between text-sm p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700/50">
+                                        <span className="truncate" title={dep.title}>{dep.title}</span>
+                                        <button type="button" onClick={() => handleRemoveDependency(dep.id)} className="p-1 text-red-500 hover:text-red-700"><XMarkIcon className="w-3 h-3"/></button>
+                                    </div>
+                                ))}
+                                <div className="relative" ref={depDropdownRef}>
+                                    <input 
+                                        type="text"
+                                        value={dependencySearch}
+                                        onChange={e => setDependencySearch(e.target.value)}
+                                        onFocus={() => setIsDepDropdownOpen(true)}
+                                        placeholder="+ Add prerequisite task"
+                                        className="w-full text-sm mt-1 p-1 bg-transparent border-none focus:ring-0 placeholder-primary/70"
+                                    />
+                                    {isDepDropdownOpen && (
+                                        <div className="absolute bottom-full mb-1 w-full max-h-48 overflow-y-auto bg-card-light dark:bg-card-dark rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                                            {availableTasksForDependency.map(task => (
+                                                <button key={task.id} type="button" onClick={() => handleAddDependency(task.id)} className="w-full text-left text-sm px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">{task.title}</button>
+                                            ))}
+                                            {availableTasksForDependency.length === 0 && <span className="block text-center text-xs text-gray-400 p-2">No tasks available</span>}
+                                        </div>
                                     )}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    const paneClasses = `
-      fixed z-40 bg-card-light dark:bg-card-dark flex flex-col transition-all duration-300 ease-in-out
-      ${isFullScreen
-        ? `inset-0 ${isSidebarCollapsed ? 'md:left-20' : 'md:left-72'}`
-        : 'top-0 right-0 h-screen w-full md:w-[480px] shadow-2xl animate-slide-in-right'
-      }
-    `;
-
-    return (
-        <aside className={paneClasses}>
-            <header className="flex-shrink-0 p-4 flex justify-between items-start border-b border-gray-200 dark:border-gray-700">
-                 <div className="flex-grow pr-4">
-                     {(isEditing || isAdding) ? (
-                         <input type="text" value={editedItem.title} autoFocus={isAdding} onChange={e => handleFieldChange('title', e.target.value)} placeholder={isTask ? "New Task Title" : "New Note Title"} className="w-full text-lg font-semibold bg-transparent border-b border-dashed border-gray-400 dark:border-gray-500 focus:border-solid focus:border-primary focus:ring-0" />
-                     ) : (
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{item!.title}</h2>
-                     )}
-                 </div>
-                <div className="flex items-center space-x-1">
-                    {(isEditing || isAdding) ? (
-                        <>
-                            <button
-                                onClick={handleSaveChanges}
-                                disabled={!editedItem.title.trim()}
-                                className="flex items-center space-x-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark disabled:bg-primary/70 dark:disabled:bg-primary/50 disabled:cursor-not-allowed transition-colors">
-                                {isAdding ? (
-                                    <>
-                                        <PlusIcon className="w-5 h-5"/>
-                                        <span>Add</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckIcon className="w-5 h-5"/>
-                                        <span>Save</span>
-                                    </>
-                                )}
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            {isTask && (
-                                <button onClick={() => onStartFocus(item as Task)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold bg-primary/10 text-primary rounded-lg hover:bg-primary/20" aria-label="Start Focus Session">
-                                    <CrosshairIcon className="w-4 h-4" />
-                                    Focus
-                                </button>
+                            </div>
+                            {editModeBlocking.length > 0 && (
+                                <div className="p-2 border rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 mt-2">
+                                    <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Blocking</h4>
+                                    {editModeBlocking.map(task => (
+                                        <div key={task.id} className="text-sm p-1 rounded">
+                                            <span className="truncate" title={task.title}>{task.title}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
-                            <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Edit Item"><PencilIcon className="w-5 h-5" /></button>
-                            <button onClick={handleDeleteClick} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Delete Item"><TrashIcon className="w-5 h-5" /></button>
-                        </>
+                        </div>
                     )}
-                    <button
-                        onClick={() => setIsFullScreen(prev => !prev)}
-                        className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hidden md:block"
-                        aria-label={isFullScreen ? "Exit Full Screen" : "Enter Full Screen"}
-                        title={isFullScreen ? "Exit Full Screen" : "Enter Full Screen"}
-                    >
-                        {isFullScreen ? <ExitFullScreenIcon className="w-5 h-5" /> : <FullScreenIcon className="w-5 h-5" />}
-                    </button>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" aria-label="Close Pane"><XMarkIcon className="w-5 h-5" /></button>
-                </div>
-            </header>
 
-            <div className="flex-grow flex flex-col min-h-0">
-                {(isEditing || isAdding) ? renderEditMode() : (
-                    <div className="flex-grow overflow-y-auto pb-24">
-                       {renderViewMode()}
-                    </div>
-                )}
+                    {isTask && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Linked Notes</label>
+                            <div className="p-2 border rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
+                                <div className="relative mb-2">
+                                    <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search notes to link..."
+                                        value={noteLinkSearch}
+                                        onChange={e => setNoteLinkSearch(e.target.value)}
+                                        className="w-full pl-8 pr-2 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-700/50 border-transparent focus:ring-1 focus:ring-primary"
+                                    />
+                                </div>
+                                <div className="max-h-48 overflow-y-auto">
+                                    {allNotes.length > 0 ? (
+                                        filteredNotesForLinking.length > 0 ? (
+                                            filteredNotesForLinking.map(note => (
+                                                <label key={note.id} className="flex items-center gap-3 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="form-checkbox h-4 w-4 rounded text-primary"
+                                                        checked={(editedItem as Task).linkedNoteIds?.includes(note.id)}
+                                                        onChange={(e) => {
+                                                            const currentIds = (editedItem as Task).linkedNoteIds || [];
+                                                            const newIds = e.target.checked
+                                                                ? [...currentIds, note.id]
+                                                                : currentIds.filter(id => id !== note.id);
+                                                            handleFieldChange('linkedNoteIds', newIds);
+                                                        }}
+                                                    />
+                                                    <span className="text-sm truncate">{note.title}</span>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <p className="text-xs text-center text-gray-500 p-2">No matching notes found.</p>
+                                        )
+                                    ) : (
+                                        <p className="text-xs text-center text-gray-500 p-2">No notes available to link.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isTask && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                            <input type="date" value={getValidDateForInput((editedItem as Task).dueDate)} onChange={e => { handleFieldChange('dueDate', e.target.value ? new Date(`${e.target.value}T00:00:00`).toISOString() : '') }} required className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleSuggestPriority}
+                                        disabled={isSuggestingPriority}
+                                        className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 flex items-center gap-1"
+                                    >
+                                        <SparklesIcon className="w-3 h-3"/>
+                                        {isSuggestingPriority ? 'Suggesting...' : 'AI Suggest'}
+                                    </button>
+                                </div>
+                                <select value={(editedItem as Task).priority} onChange={e => handleFieldChange('priority', e.target.value as Priority)} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
+                                    {Object.values(Priority).map(p => (<option key={p} value={p}>{p}</option>))}
+                                </select>
+                            </div>
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reminder</label>
+                                <input 
+                                    type="datetime-local"
+                                    value={ (editedItem as Task).reminder ? format(new Date((editedItem as Task).reminder!), "yyyy-MM-dd'T'HH:mm") : '' }
+                                    onChange={e => handleFieldChange('reminder', e.target.value ? new Date(e.target.value).toISOString() : null)}
+                                    className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"
+                                />
+                            </div>
+                        </div>
+                    )}
+                    {isTask && applicableFields.map(field => (
+                        <div key={field.id}>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.name}</label>
+                            {field.type === 'text' && <input type="text" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.value)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>}
+                            {field.type === 'number' && <input type="number" value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, e.target.valueAsNumber)} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>}
+                            {field.type === 'date' && <input type="date" value={getValidDateForInput((editedItem as Task).customFields?.[field.id])} onChange={e => handleCustomFieldChange(field.id, e.target.value ? new Date(`${e.target.value}T00:00:00`).toISOString() : '')} className="w-full form-input rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary"/>}
+                            {field.type === 'checkbox' && <input type="checkbox" checked={(editedItem as Task).customFields?.[field.id] || false} onChange={e => handleCustomFieldChange(field.id, e.target.checked)} className="h-5 w-5 form-checkbox rounded text-primary focus:ring-primary"/>}
+                            {field.type === 'select' && (
+                                <select value={(editedItem as Task).customFields?.[field.id] || ''} onChange={e => handleCustomFieldChange(field.id, Number(e.target.value))} className="w-full form-select rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-primary">
+                                    <option value="">Select...</option>
+                                    {field.options?.map(opt => <option key={opt.id} value={opt.id}>{opt.value}</option>)}
+                                </select>
+                            )}
+                        </div>
+                    ))}
+                </div>
             </div>
-            
+        );
+    }
+
+    const paneWidthClass = isSidebarCollapsed ? 'w-[calc(100vw-5rem)] sm:w-[500px]' : 'w-[calc(100vw-18rem)] sm:w-[500px]';
+    const fullScreenClasses = isFullScreen ? 'fixed inset-0 w-full h-full z-50 max-w-none' : `fixed top-0 right-0 h-full max-w-full z-40 ${paneWidthClass}`;
+    
+    return (
+        <div className={`bg-page dark:bg-page-dark shadow-2xl flex flex-col animate-slide-in-right ${fullScreenClasses}`} onClick={e => e.stopPropagation()}>
+            <header className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700/80 flex justify-between items-center">
+                <div className="flex-grow min-w-0">
+                {isEditing ? (
+                     <input type="text" value={editedItem.title} onChange={e => handleFieldChange('title', e.target.value)} placeholder={isTask ? 'Task Title' : 'Note Title'} className="w-full text-xl font-bold bg-transparent focus:outline-none focus:ring-0 border-0 p-1 text-gray-900 dark:text-white border-b-2 border-dashed border-gray-300 dark:border-gray-600 focus:border-solid focus:border-primary"/>
+                ) : (
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-white truncate" title={item?.title}>{item?.title}</h2>
+                )}
+                </div>
+                 <div className="flex items-center space-x-2 pl-4">
+                     {isEditing ? (
+                         <>
+                            <button onClick={handleSaveChanges} className="px-4 py-1.5 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary-dark">Save</button>
+                            <button onClick={() => isAdding ? onClose() : setIsEditing(false)} className="px-4 py-1.5 text-sm font-semibold bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                         </>
+                     ) : (
+                         <>
+                            <button onClick={() => onStartFocus(item as Task)} disabled={!isTask} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed" title="Start Focus Session"><CrosshairIcon className="w-5 h-5"/></button>
+                            <button onClick={() => setIsEditing(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="Edit"><PencilIcon className="w-5 h-5"/></button>
+                            <button onClick={handleDeleteClick} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="Delete"><TrashIcon className="w-5 h-5"/></button>
+                         </>
+                     )}
+                     <button onClick={() => setIsFullScreen(p => !p)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title={isFullScreen ? 'Exit Full Screen' : 'Full Screen'}>{isFullScreen ? <ExitFullScreenIcon className="w-5 h-5" /> : <FullScreenIcon className="w-5 h-5" />}</button>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="Close"><XMarkIcon className="w-6 h-6"/></button>
+                 </div>
+            </header>
+            <main className="flex-grow overflow-y-auto relative">
+                 {isEditing ? renderEditMode() : renderViewMode()}
+            </main>
             {!isAdding && !isEditing && (
-              <div className="absolute bottom-6 right-6 z-10">
-                  <button
-                      onClick={handleAnalyze}
-                      disabled={isAnalyzing}
-                      className="w-14 h-14 bg-primary rounded-full text-white flex items-center justify-center shadow-lg hover:bg-primary-dark disabled:bg-primary/70 disabled:cursor-not-allowed transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-offset-gray-900"
-                      title="Analyze with AI"
-                      aria-label="Analyze with AI"
-                  >
-                      {isAnalyzing 
-                          ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          : <SparklesIcon className="w-7 h-7" />
-                      }
-                  </button>
-              </div>
+                 <div className="absolute bottom-6 right-6 z-10">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={isAnalyzing}
+                        className="w-14 h-14 bg-primary rounded-full text-white flex items-center justify-center shadow-lg hover:bg-primary-dark disabled:bg-primary/70 disabled:cursor-not-allowed transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-offset-page-dark"
+                        title="Analyze with AI"
+                        aria-label="Analyze with AI"
+                    >
+                        {isAnalyzing 
+                            ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            : <SparklesIcon className="w-7 h-7" />
+                        }
+                    </button>
+                </div>
             )}
-        </aside>
+        </div>
     );
 };
 

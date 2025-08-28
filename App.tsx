@@ -10,6 +10,8 @@ import {
   ActiveSelection,
   SavedFilter,
   StickyNote,
+  StickyNoteBoard,
+  StickyNoteLink,
   TaskFilter,
   ChecklistItem,
   Attachment,
@@ -28,13 +30,25 @@ import {
   HabitLog,
   CustomReminder,
 } from './types';
-import { isDate, format } from 'date-fns';
+import { isToday as isTodayFns, format } from 'date-fns';
 import { runChat, initializeAi, parseQuickAddTask } from './services/geminiService';
-import { storageService } from './services/storageService';
-import FocusModeView from './components/FocusModeView';
 import { notificationService } from './services/notificationService';
 import { gamificationService } from './services/gamificationService';
+import FocusModeView from './components/FocusModeView';
 import { CheckCircleIcon, BellIcon, XMarkIcon } from './components/icons';
+import { listService } from './services/listService';
+import { taskService } from './services/taskService';
+import { noteService } from './services/noteService';
+import { savedFilterService } from './services/savedFilterService';
+import { stickyNoteService } from './services/stickyNoteService';
+import { chatService } from './services/chatService';
+import { goalService } from './services/goalService';
+import { customFieldService } from './services/customFieldService';
+import { userStatsService } from './services/userStatsService';
+import { habitService } from './services/habitService';
+import { reminderService } from './services/reminderService';
+import { settingsService } from './services/settingsService';
+
 
 const newSubId = () => Date.now() + Math.floor(Math.random() * 1000);
 
@@ -72,6 +86,8 @@ const App = () => {
     const [notes, setNotes] = React.useState<Note[]>([]);
     const [savedFilters, setSavedFilters] = React.useState<SavedFilter[]>([]);
     const [stickyNotes, setStickyNotes] = React.useState<StickyNote[]>([]);
+    const [stickyNoteBoards, setStickyNoteBoards] = React.useState<StickyNoteBoard[]>([]);
+    const [stickyNoteLinks, setStickyNoteLinks] = React.useState<StickyNoteLink[]>([]);
     const [chatSessions, setChatSessions] = React.useState<ChatSession[]>([]);
     const [goals, setGoals] = React.useState<Goal[]>([]);
     const [habits, setHabits] = React.useState<Habit[]>([]);
@@ -159,18 +175,67 @@ const App = () => {
     // --- GLOBAL KEYBOARD SHORTCUTS ---
     React.useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            // Global Search
             if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
                 event.preventDefault();
                 setIsSearchOpen(prev => !prev);
             }
+
+            // New Task
+            if ((event.metaKey || event.ctrlKey) && event.key === 'n') {
+                event.preventDefault();
+                let targetListId: number | undefined;
+
+                if (activeSelection.type === 'list') {
+                    const currentList = lists.find(l => l.id === activeSelection.id);
+                    if (currentList?.type === 'task') {
+                        targetListId = currentList.id;
+                    }
+                }
+
+                if (!targetListId) {
+                    const firstTaskList = lists.find(l => l.type === 'task');
+                    if (firstTaskList) {
+                        targetListId = firstTaskList.id;
+                    }
+                }
+
+                if (targetListId) {
+                    setDetailItem(null);
+                    setAddingItemInfo({ listId: targetListId, type: 'task' });
+                } else {
+                    console.warn("Ctrl+N pressed but no task list found to add to.");
+                }
+            }
+
+            // View Navigation
+            if ((event.metaKey || event.ctrlKey)) {
+                let newSelection: ActiveSelection | null = null;
+                switch(event.key) {
+                    case '1': newSelection = { type: 'dashboard' }; break;
+                    case '2': newSelection = { type: 'smart-list', id: 'today' }; break;
+                    case '3': newSelection = { type: 'ai-chat' }; break;
+                    case '4': newSelection = { type: 'goals' }; break;
+                    case '5': newSelection = { type: 'habits' }; break;
+                    case '6': newSelection = { type: 'settings' }; break;
+                    default: break;
+                }
+
+                if (newSelection) {
+                    event.preventDefault();
+                    setActiveSelection(newSelection);
+                    setDetailItem(null);
+                    setAddingItemInfo(null);
+                }
+            }
         };
 
         window.addEventListener('keydown', handleKeyDown);
-
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, []);
+    }, [activeSelection, lists]);
+
 
     // --- IN-APP NOTIFICATION HANDLER ---
     React.useEffect(() => {
@@ -193,861 +258,627 @@ const App = () => {
     }, []);
 
     // --- DATA LOADING & VALIDATION ---
-    React.useEffect(() => {
-        const checkOnboarding = async () => {
-            const onboardingDone = await storageService.getSetting('onboardingComplete');
-            if (onboardingDone) {
-                setIsOnboardingComplete(true);
-                const storedName = await storageService.getSetting('userName') || 'User';
-                const storedKey = await storageService.getSetting('apiKey');
-                setUserName(storedName);
-                setApiKey(storedKey);
-                initializeAi(storedKey);
-                 loadAllData();
-            } else {
-                 setIsDataLoaded(true); // Allow onboarding to show without loading all data
-            }
-        }
+    const loadAllData = React.useCallback(async () => {
+        const [
+            rawLists, rawTasks, rawNotes, loadedSavedFilters, rawStickyNotes,
+            rawStickyNoteBoards, rawChatSessions, rawGoals, loadedCustomFields, loadedUserStats,
+            rawHabits, loadedHabitLogs, loadedCustomReminders, rawStickyNoteLinks
+        ] = await Promise.all([
+            listService.getAll(),
+            taskService.getAll(),
+            noteService.getAll(),
+            savedFilterService.getAll(),
+            stickyNoteService.getAllNotes(),
+            stickyNoteService.getAllBoards(),
+            chatService.getAll(),
+            goalService.getAll(),
+            customFieldService.getAll(),
+            userStatsService.getAll(),
+            habitService.getAllHabits(),
+            habitService.getAllLogs(),
+            reminderService.getAll(),
+            stickyNoteService.getAllLinks()
+        ]);
+        
+        let finalLists = rawLists;
 
-        const loadAllData = async () => {
-            const [
-                rawLists, rawTasks, rawNotes, loadedSavedFilters, rawStickyNotes,
-                rawChatSessions, rawGoals, loadedCustomFields, loadedUserStats,
-                rawHabits, loadedHabitLogs, loadedCustomReminders
-            ] = await Promise.all([
-                storageService.getAll('List'),
-                storageService.getAll('Task'),
-                storageService.getAll('Note'),
-                storageService.getAll('SavedFilter'),
-                storageService.getAll('StickyNote'),
-                storageService.getAll('ChatSession'),
-                storageService.getAll('Goal'),
-                storageService.getAll('CustomFieldDefinition'),
-                storageService.getById('UserStats', 1),
-                storageService.getAll('Habit'),
-                storageService.getAll('HabitLog'),
-                storageService.getAll('CustomReminder'),
-            ]);
-
-            const loadedLists = rawLists.map(l => ({
-                ...l,
-                parentId: l.parentId || null
-            }));
-
-            // Sanitize loaded data to ensure all properties exist, preventing crashes from legacy data.
-            const loadedTasks = rawTasks.map(t => ({
-                ...t,
-                description: t.description || '',
-                tags: t.tags || [],
-                attachments: t.attachments || [],
-                checklist: t.checklist || [],
-                comments: t.comments || [],
-                activityLog: t.activityLog || [],
-                customFields: t.customFields || {},
-                linkedNoteIds: t.linkedNoteIds || [],
-                reminder: t.reminder || null,
-            }));
-
-            const loadedNotes = rawNotes.map(n => ({
-                ...n,
-                content: n.content || '',
-                tags: n.tags || [],
-                attachments: n.attachments || [],
-            }));
-
-            const loadedStickyNotes = rawStickyNotes.map(sn => ({
-                ...sn,
-                size: sn.size || { width: 256, height: 224 }
-            }));
-            
-            const loadedGoals = rawGoals.map(g => ({
-                ...g,
-                motivation: g.motivation || '',
-                linkedTaskListIds: g.linkedTaskListIds || [],
-                journal: g.journal || [],
-            }));
-            
-            const loadedHabits = rawHabits.map(h => ({
-                ...h,
-                reminderTime: h.reminderTime || null,
-            }));
-
-            const loadedChatSessions = rawChatSessions.map(cs => ({
-                ...cs,
-                messages: cs.messages || [],
-            }));
-
-            setLists(loadedLists);
-            setTasks(loadedTasks);
-            setNotes(loadedNotes);
-            setSavedFilters(loadedSavedFilters);
-            setStickyNotes(loadedStickyNotes);
-            setChatSessions(loadedChatSessions);
-            setGoals(loadedGoals);
-            setCustomFieldDefinitions(loadedCustomFields);
-            setHabits(loadedHabits);
-            setHabitLogs(loadedHabitLogs);
-            setCustomReminders(loadedCustomReminders);
-            setUserStats(loadedUserStats || { id: 1, points: 0, currentStreak: 0, lastCompletionDate: null });
-
-
-            setIsDataLoaded(true);
-        };
-
-        checkOnboarding();
-    }, []);
-    
-    // --- GOAL PROGRESS CALCULATION ---
-    React.useEffect(() => {
-        const calculateGoalProgress = () => {
-            const goalsWithProgress = goals.map(goal => {
-                if (!goal.linkedTaskListIds || goal.linkedTaskListIds.length === 0) {
-                    return { ...goal, progress: goal.progress || 0 };
-                }
-                const projectTasks = tasks.filter(t => goal.linkedTaskListIds.includes(t.listId));
-                if (projectTasks.length === 0) {
-                    return { ...goal, progress: 0 };
-                }
-                const completedTasks = projectTasks.filter(t => t.status === Status.Done).length;
-                const progress = Math.round((completedTasks / projectTasks.length) * 100);
-                
-                let status = GoalStatus.OnTrack;
-                // Basic logic for status - can be enhanced by AI later
-                if (progress < 100 && new Date(goal.targetDate) < new Date()) {
-                    status = GoalStatus.OffTrack;
-                } else if (progress < 50 && (new Date(goal.targetDate).getTime() - Date.now()) < (new Date(goal.targetDate).getTime() - new Date(goal.createdAt).getTime()) / 2) {
-                     status = GoalStatus.AtRisk;
-                }
-
-                return { ...goal, progress, status };
-            });
-
-            // Avoid unnecessary re-renders if progress hasn't changed
-            if (JSON.stringify(goals) !== JSON.stringify(goalsWithProgress)) {
-                setGoals(goalsWithProgress);
-            }
-        };
-
-        if (isDataLoaded && isOnboardingComplete) {
-            calculateGoalProgress();
-        }
-    }, [tasks, goals, isDataLoaded, isOnboardingComplete]);
-
-    // --- NOTIFICATIONS & REMINDERS ---
-    React.useEffect(() => {
-        if (isDataLoaded && isOnboardingComplete) {
-            notificationService.requestPermission();
-            
-            // Run once on load, then set interval
-            notificationService.runAllReminderChecks(tasks, habits, customReminders, habitLogs, goals);
-      
-            const reminderInterval = setInterval(() => {
-              notificationService.runAllReminderChecks(tasks, habits, customReminders, habitLogs, goals);
-            }, 60 * 1000); // Check every minute
-      
-            return () => clearInterval(reminderInterval);
-        }
-    }, [isDataLoaded, isOnboardingComplete, tasks, habits, customReminders, habitLogs, goals]);
-
-
-    // --- HANDLERS ---
-    const handleAddList = async (list: Omit<List, 'id' | 'statuses'>): Promise<List> => {
-        const defaultStatuses: ListStatusMapping[] | undefined = list.type === 'task' 
-            ? [
+        if (rawLists.length === 0) {
+            console.log("No lists found, creating default lists.");
+            const defaultTaskStatuses: ListStatusMapping[] = [
                 { status: Status.ToDo, name: 'To Do' },
                 { status: Status.InProgress, name: 'In Progress' },
                 { status: Status.Done, name: 'Done' }
-              ]
-            : undefined;
-        const newList = { ...list, parentId: list.parentId || null, statuses: defaultStatuses };
-        const addedList = await storageService.add('List', newList);
+            ];
+
+            const defaultListsToAdd: Omit<List, 'id'>[] = [
+                {
+                    name: 'My Tasks',
+                    color: '#3B82F6',
+                    type: 'task',
+                    parentId: null,
+                    defaultView: 'board',
+                    statuses: defaultTaskStatuses
+                },
+                {
+                    name: 'Personal',
+                    color: '#84CC16',
+                    type: 'task',
+                    parentId: null,
+                    defaultView: 'list',
+                    statuses: defaultTaskStatuses
+                },
+                {
+                    name: 'Notes',
+                    color: '#F97316',
+                    type: 'note',
+                    parentId: null
+                }
+            ];
+
+            const addedLists = await Promise.all(
+                defaultListsToAdd.map(list => listService.add(list))
+            );
+            finalLists = addedLists;
+        }
+        
+        setLists(finalLists.map(l => ({ ...l, parentId: l.parentId ?? null })));
+        setTasks(rawTasks.map(t => ({
+            ...t,
+            tags: t.tags || [],
+            attachments: t.attachments || [],
+            checklist: t.checklist || [],
+            comments: t.comments || [],
+            activityLog: t.activityLog || [],
+            customFields: t.customFields || {},
+            linkedNoteIds: t.linkedNoteIds || [],
+            dependencyIds: t.dependencyIds || [],
+            blockingIds: t.blockingIds || [],
+        })));
+        setNotes(rawNotes.map(n => ({
+            ...n,
+            tags: n.tags || [],
+            attachments: n.attachments || [],
+        })));
+        setSavedFilters(loadedSavedFilters);
+        setStickyNotes(rawStickyNotes.map(sn => ({ ...sn, position: sn.position || { x: 50, y: 50 }, size: sn.size || { width: 250, height: 200 } })));
+        setStickyNoteBoards(rawStickyNoteBoards);
+        setStickyNoteLinks(rawStickyNoteLinks);
+        setChatSessions(rawChatSessions.map(cs => ({ ...cs, messages: cs.messages || [] })));
+        setGoals(rawGoals.map(g => ({ ...g, journal: g.journal || [] })));
+        setCustomFieldDefinitions(loadedCustomFields);
+        setUserStats(loadedUserStats[0] || { id: 1, points: 0, currentStreak: 0, lastCompletionDate: null });
+        setHabits(rawHabits);
+        setHabitLogs(loadedHabitLogs);
+        setCustomReminders(loadedCustomReminders);
+
+        const loadedApiKey = await settingsService.getSetting('apiKey');
+        const loadedUserName = await settingsService.getSetting('userName');
+        const onboarding = await settingsService.getSetting('onboardingComplete');
+        setApiKey(loadedApiKey);
+        setUserName(loadedUserName || 'User');
+        initializeAi(loadedApiKey);
+        setIsOnboardingComplete(onboarding == true);
+        setIsDataLoaded(true);
+
+    }, []);
+
+    React.useEffect(() => {
+        loadAllData();
+    }, [loadAllData]);
+
+    // --- REMINDER CHECKS ---
+    React.useEffect(() => {
+        notificationService.requestPermission();
+        const interval = setInterval(() => {
+            notificationService.runAllReminderChecks(tasks, habits, customReminders, habitLogs, goals);
+        }, 60 * 1000); // Check every minute
+
+        return () => clearInterval(interval);
+    }, [tasks, habits, customReminders, habitLogs, goals]);
+
+    // --- HANDLER FUNCTIONS ---
+    
+    // Onboarding
+    const handleOnboardingComplete = async (details: { userName: string; apiKey?: string }) => {
+        await settingsService.setSetting('onboardingComplete', 'true');
+        await handleUpdateUser(details.userName);
+        if (details.apiKey) {
+           await handleUpdateApiKey(details.apiKey);
+        }
+        setIsOnboardingComplete(true);
+    };
+
+    // Lists
+    const handleAddList = async (listData: Omit<List, 'id' | 'statuses'>) => {
+        const listPayload: Omit<List, 'id'> = {
+            ...listData,
+            statuses: listData.type === 'task'
+                ? [
+                    { status: Status.ToDo, name: 'To Do' },
+                    { status: Status.InProgress, name: 'In Progress' },
+                    { status: Status.Done, name: 'Done' }
+                  ]
+                : undefined
+        };
+        const addedList = await listService.add(listPayload);
         setLists(prev => [...prev, addedList]);
         return addedList;
     };
-
-    const handleUpdateList = async (updatedList: List) => {
-        await storageService.update('List', updatedList.id, updatedList);
-        setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
-    };
-
-    const handleDeleteList = async (listId: number) => {
-        const listToDelete = lists.find(l => l.id === listId);
-        if (!listToDelete) return;
-
-        // Delete associated items first
-        if (listToDelete.type === 'task') {
-            const tasksToDelete = tasks.filter(t => t.listId === listId);
-            for (const task of tasksToDelete) {
-                await storageService.delete('Task', task.id);
-            }
-            setTasks(prev => prev.filter(t => t.listId !== listId));
-        } else {
-            const notesToDelete = notes.filter(n => n.listId === listId);
-            for (const note of notesToDelete) {
-                await storageService.delete('Note', note.id);
-            }
-            setNotes(prev => prev.filter(n => n.listId !== listId));
-        }
-
-        await storageService.delete('List', listId);
-        
-        // Reparent children in state to ensure UI updates correctly
-        setLists(prev => {
-            const listsAfterDelete = prev.filter(l => l.id !== listId);
-            return listsAfterDelete.map(l => l.parentId === listId ? { ...l, parentId: null } : l);
+    const handleUpdateList = (updatedList: List) => {
+        listService.update(updatedList).then(() => {
+            setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
         });
-
-        if (activeSelection.type === 'list' && activeSelection.id === listId) {
-            setActiveSelection({type: 'smart-list', id: 'today'});
-            setDetailItem(null);
-        }
     };
-    
-    const handleAddItem = async (item: Partial<Task & Note>, listId: number, type: 'task' | 'note'): Promise<Task | Note> => {
-        setAddingItemInfo(null);
-        let targetListId = listId;
-        const list = lists.find(l => l.id === listId);
+    const handleDeleteList = (listId: number) => {
+        listService.delete(listId).then(() => {
+            setLists(prev => prev.filter(l => l.id !== listId));
+            // Also delete associated tasks/notes
+            setTasks(prev => prev.filter(t => t.listId !== listId));
+            setNotes(prev => prev.filter(n => n.listId !== listId));
+            setActiveSelection({ type: 'dashboard' });
+        });
+    };
 
-        if (!list || list.type !== type) {
-            // ... (fallback logic remains similar)
-        }
+    // Tasks & Notes
+    const handleAddItem = async (itemData: Partial<Task & Note>, listId: number, type: 'task' | 'note'): Promise<Task | Note> => {
+        const now = new Date().toISOString();
+        const baseItem = {
+            ...itemData,
+            listId,
+            createdAt: now,
+            tags: itemData.tags || [],
+            attachments: itemData.attachments || [],
+        };
 
         if (type === 'task') {
-            const createdAt = new Date().toISOString();
-            const title = item.title || 'Untitled Task';
-            
-            const getValidDueDate = (dateString?: string): string => {
-                if (dateString) {
-                    // Handle ISO strings directly. Handle YYYY-MM-DD format by treating it as local time to avoid timezone shifts.
-                    const date = new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
-                    if (!isNaN(date.getTime())) {
-                        return date.toISOString();
-                    }
-                }
-                // Default to today if no valid date is provided.
-                return new Date().toISOString();
+            const newItem: Omit<Task, 'id'> = {
+                title: itemData.title || 'New Task',
+                description: itemData.description || '',
+                status: itemData.status || Status.ToDo,
+                priority: itemData.priority || Priority.Medium,
+                dueDate: itemData.dueDate || new Date().toISOString(),
+                checklist: itemData.checklist || [],
+                comments: [],
+                activityLog: [{ id: newSubId(), type: 'created', content: {}, taskTitle: itemData.title || '', createdAt: now, userName }],
+                customFields: {},
+                ...baseItem,
             };
-
-            const checklistData = (item as any).checklist || [];
-            const checklist: ChecklistItem[] = checklistData.map((c: any) => 
-                typeof c === 'string' 
-                    ? { id: newSubId(), text: c, completed: false } 
-                    : c
-            );
-
-            const newActivityLog: ActivityLog = { id: newSubId(), type: 'created', content: {}, taskTitle: title, createdAt, userName };
-            const newTaskData = { 
-                listId: targetListId,
-                title,
-                description: item.description || '',
-                status: Status.ToDo,
-                priority: item.priority || Priority.Medium,
-                dueDate: getValidDueDate(item.dueDate),
-                reminder: (item as Task).reminder || null,
-                tags: item.tags || [],
-                createdAt,
-                attachments: item.attachments || [],
-                checklist,
-                comments: item.comments || [],
-                activityLog: [newActivityLog],
-                customFields: item.customFields || {},
-                linkedNoteIds: (item as Task).linkedNoteIds || [],
-            };
-            const newTask = await storageService.add('Task', newTaskData);
-            if (newTask) {
-                setTasks(prev => [...prev, newTask]);
-                return newTask;
-            } else {
-                console.error("Failed to add task: storage service returned an empty value.");
-                throw new Error("An error occurred while adding tasks. Please try again.");
-            }
+            const addedTask = await taskService.add(newItem);
+            setTasks(prev => [...prev, addedTask]);
+            return addedTask;
         } else {
-            const newNoteData = { 
-                listId: targetListId,
-                title: item.title || 'Untitled Note',
-                content: item.content || '',
-                tags: item.tags || [],
-                createdAt: new Date().toISOString(), 
-                updatedAt: new Date().toISOString(),
-                attachments: item.attachments || [],
+            const newItem: Omit<Note, 'id'> = {
+                title: itemData.title || 'New Note',
+                content: itemData.content || '',
+                updatedAt: now,
+                ...baseItem,
             };
-            const newNote = await storageService.add('Note', newNoteData);
-            if (newNote) {
-                setNotes(prev => [newNote, ...prev]);
-                return newNote;
-            } else {
-                console.error("Failed to add note: storage service returned an empty value.");
-                throw new Error("An error occurred while adding the note. Please try again.");
-            }
+            const addedNote = await noteService.add(newItem);
+            setNotes(prev => [...prev, addedNote]);
+            return addedNote;
         }
     };
     
-    const handleUpdateItem = async (item: Task | Note) => {
-        if ('status' in item) { // Task
-            const originalTask = tasks.find(t => t.id === item.id);
-            if (!originalTask) return;
-
-            const updatedTask = item as Task;
-            let newActivityLogs: ActivityLog[] = [];
-
-            if (originalTask.status !== updatedTask.status) {
-                newActivityLogs.push({ id: newSubId(), type: 'status', content: { from: originalTask.status, to: updatedTask.status }, taskTitle: updatedTask.title, createdAt: new Date().toISOString(), userName });
-                
-                // --- Gamification Hook ---
-                if (updatedTask.status === Status.Done && originalTask.status !== Status.Done) {
-                    if (userStats) {
-                        const updatedStats = gamificationService.processTaskCompletion(userStats);
-                        setUserStats(updatedStats);
-                        storageService.update('UserStats', 1, updatedStats);
+    const handleUpdateItem = (item: Task | Note) => {
+        const isTask = 'status' in item;
+    
+        // Check for incomplete dependencies before marking a task as done
+        if (isTask) {
+            const taskToUpdate = item as Task;
+            const originalTask = tasks.find(t => t.id === taskToUpdate.id);
+            
+            // Check if status is being changed TO 'Done'
+            if (originalTask && taskToUpdate.status === Status.Done && originalTask.status !== Status.Done) {
+                const dependencyIds = originalTask.dependencyIds || [];
+                if (dependencyIds.length > 0) {
+                    const incompleteDependencies = dependencyIds
+                        .map(id => tasks.find(t => t.id === id))
+                        .filter(dep => dep && dep.status !== Status.Done);
+    
+                    if (incompleteDependencies.length > 0) {
+                        const incompleteTaskTitles = incompleteDependencies.map(dep => `"${dep?.title}"`).join(', ');
+                        alert(`Cannot complete this task. The following prerequisite tasks must be completed first: ${incompleteTaskTitles}.`);
+                        return; // Abort the update
                     }
                 }
             }
-            if (originalTask.priority !== updatedTask.priority) {
-                newActivityLogs.push({ id: newSubId(), type: 'priority', content: { from: originalTask.priority, to: updatedTask.priority }, taskTitle: updatedTask.title, createdAt: new Date().toISOString(), userName });
-            }
-
-            // Sanitize all properties on update to prevent crashes from legacy data being re-saved.
-            const finalTask: Task = {
-                ...updatedTask,
-                description: updatedTask.description || '',
-                tags: updatedTask.tags || [],
-                attachments: updatedTask.attachments || [],
-                checklist: updatedTask.checklist || [],
-                comments: updatedTask.comments || [],
-                activityLog: [...(updatedTask.activityLog || []), ...newActivityLogs],
-                customFields: updatedTask.customFields || {},
-                linkedNoteIds: updatedTask.linkedNoteIds || [],
-                reminder: updatedTask.reminder || null,
-            };
-
-            await storageService.update('Task', finalTask.id, finalTask);
-            setTasks(prev => prev.map(t => (t.id === finalTask.id ? finalTask : t)));
-            if (detailItem?.id === item.id) setDetailItem(finalTask);
-        } else { // Note
-            // Sanitize note properties on update as well.
-            const updatedNote: Note = {
-                ...item,
-                updatedAt: new Date().toISOString(),
-                content: item.content || '',
-                tags: item.tags || [],
-                attachments: item.attachments || [],
-            };
-            await storageService.update('Note', updatedNote.id, updatedNote);
-            setNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
-            if (detailItem?.id === item.id) setDetailItem(updatedNote);
         }
-    };
-
-    const handleDeleteItem = async (itemId: number, type: 'task' | 'note') => {
-        const collection = type === 'task' ? 'Task' : 'Note';
-        await storageService.delete(collection, itemId);
-       if (type === 'task') {
-         setTasks(prev => prev.filter(t => t.id !== itemId));
-       } else {
-         setNotes(prev => prev.filter(n => n.id !== itemId));
-       }
-    };
-
-    const handleAddComment = async (taskId: number, content: string) => {
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) return;
-
-        const createdAt = new Date().toISOString();
-        const newComment: Comment = { id: newSubId(), content, createdAt, userName, avatarUrl: undefined };
-        const newActivityLog: ActivityLog = { id: newSubId(), type: 'comment', content: { commentContent: content }, taskTitle: task.title, createdAt, userName };
-        
-        // Ensure comments and activityLog arrays exist before spreading.
-        const updatedTask = {
-            ...task,
-            comments: [...(task.comments || []), newComment],
-            activityLog: [...(task.activityLog || []), newActivityLog]
-        };
-
-        await storageService.update('Task', taskId, updatedTask);
-        setTasks(prev => prev.map(t => (t.id === taskId ? updatedTask : t)));
-        if (detailItem?.id === taskId) setDetailItem(updatedTask);
-    };
-
-    const handleAddSavedFilter = async (name: string, filter: TaskFilter) => {
-        const newFilterData = { name, filter };
-        const newFilter = await storageService.add('SavedFilter', newFilterData);
-        setSavedFilters(prev => [...prev, newFilter]);
-    };
-
-    const handleDeleteSavedFilter = async (filterId: number) => {
-        await storageService.delete('SavedFilter', filterId);
-        setSavedFilters(prev => prev.filter(f => f.id !== filterId));
-        if (activeSelection.type === 'saved-filter' && activeSelection.id === filterId) {
-            setActiveSelection({ type: 'smart-list', id: 'today' });
+    
+        const updatedItem = { ...item };
+        if (!isTask) {
+            (updatedItem as Note).updatedAt = new Date().toISOString();
         }
-    };
 
-    const handleAddStickyNote = async () => {
-        const newNoteData = { 
-            title: 'New Note', 
-            content: 'Start typing...', 
-            color: '#FBBF24', 
-            position: { x: 20, y: 20 },
-            size: { width: 256, height: 224 } 
-        };
-        const newNote = await storageService.add('StickyNote', newNoteData);
-        setStickyNotes(prev => [...prev, newNote]);
-    };
-
-    const handleUpdateStickyNote = async (updatedNote: StickyNote) => {
-        await storageService.update('StickyNote', updatedNote.id, updatedNote);
-        setStickyNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
-    };
-
-    const handleDeleteStickyNote = async (id: number) => {
-        await storageService.delete('StickyNote', id);
-        setStickyNotes(prev => prev.filter(n => n.id !== id));
-    };
-
-    const handleUpsertGoal = async (goal: Omit<Goal, 'id'> & { id?: number }) => {
-        if (goal.id) {
-            const updatedGoal = { ...goal } as Goal;
-            await storageService.update('Goal', goal.id, updatedGoal);
-            setGoals(prev => prev.map(g => g.id === goal.id ? updatedGoal : g));
+        // If the item being updated is the one in the detail pane, update the detail pane as well.
+        if (detailItem && detailItem.id === item.id) {
+            setDetailItem(updatedItem);
+        }
+    
+        if (isTask) {
+            taskService.update(updatedItem as Task).then(() => {
+                setTasks(prev => prev.map(t => t.id === item.id ? (updatedItem as Task) : t));
+            });
         } else {
-            const newGoalData = {
-                ...goal,
+            noteService.update(updatedItem as Note).then(() => {
+                setNotes(prev => prev.map(n => n.id === item.id ? (updatedItem as Note) : n));
+            });
+        }
+    };
+    
+    const handleDeleteItem = (itemId: number, type: 'task' | 'note') => {
+        const service = type === 'task' ? taskService : noteService;
+        service.delete(itemId).then(() => {
+            if (type === 'task') {
+                setTasks(prev => prev.filter(t => t.id !== itemId));
+            } else {
+                setNotes(prev => prev.filter(n => n.id !== itemId));
+            }
+        });
+    };
+
+    const handleAddComment = (taskId: number, content: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            const newComment: Comment = { id: newSubId(), content, createdAt: new Date().toISOString(), userName, avatarUrl: '' };
+            const newActivity: ActivityLog = { id: newSubId(), type: 'comment', content: { commentContent: content }, taskTitle: task.title, createdAt: new Date().toISOString(), userName };
+
+            const updatedTask = { 
+                ...task, 
+                comments: [...task.comments, newComment],
+                activityLog: [...task.activityLog, newActivity]
+            };
+            handleUpdateItem(updatedTask);
+        }
+    };
+
+    // Habits
+    const handleUpsertHabit = (habit: Omit<Habit, 'id' | 'createdAt'> & { id?: number }) => {
+        if (habit.id) { // Update
+            habitService.updateHabit(habit as Habit).then(() => {
+                setHabits(prev => prev.map(h => h.id === habit.id ? (habit as Habit) : h));
+            });
+        } else { // Add
+            const newHabit = { ...habit, createdAt: new Date().toISOString() };
+            habitService.addHabit(newHabit as Omit<Habit, 'id'>).then(addedHabit => {
+                setHabits(prev => [...prev, addedHabit]);
+            });
+        }
+    };
+
+    const handleDeleteHabit = (habitId: number) => {
+        habitService.deleteHabit(habitId).then(() => {
+            setHabits(prev => prev.filter(h => h.id !== habitId));
+            setHabitLogs(prev => prev.filter(log => log.habitId !== habitId));
+        });
+    };
+    
+    // FIX: The handleAddHabitLog function is updated to correctly support both binary (toggle) and quantitative (set value) habits.
+    const handleAddHabitLog = (habitId: number, date: string, value?: number) => {
+        const habit = habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        const existingLog = habitLogs.find(log => log.habitId === habitId && log.date === date);
+
+        if (habit.type === 'binary') {
+            if (existingLog) {
+                // Toggle off: delete the log
+                habitService.deleteLog(existingLog.id).then(() => {
+                    setHabitLogs(prev => prev.filter(l => l.id !== existingLog.id));
+                });
+            } else {
+                // Toggle on: add a new log with value 1
+                const newLog: Omit<HabitLog, 'id'> = { habitId, date, completedValue: 1 };
+                habitService.addLog(newLog).then(addedLog => {
+                    setHabitLogs(prev => [...prev, addedLog]);
+                });
+            }
+        } else { // Quantitative
+            if (existingLog) {
+                if (value === undefined || value <= 0) {
+                    // If new value is 0 or undefined, remove the log
+                    habitService.deleteLog(existingLog.id).then(() => {
+                        setHabitLogs(prev => prev.filter(l => l.id !== existingLog.id));
+                    });
+                } else {
+                    // Update existing log with the new value
+                    const updatedLog = { ...existingLog, completedValue: value };
+                    habitService.updateLog(updatedLog).then(() => {
+                        setHabitLogs(prev => prev.map(l => l.id === existingLog.id ? updatedLog : l));
+                    });
+                }
+            } else if (value !== undefined && value > 0) {
+                // Create new log if one doesn't exist and value is positive
+                const newLog: Omit<HabitLog, 'id'> = { habitId, date, completedValue: value };
+                habitService.addLog(newLog).then(addedLog => {
+                    setHabitLogs(prev => [...prev, addedLog]);
+                });
+            }
+        }
+    };
+
+    // Goals
+    const handleUpsertGoal = (goalData: Omit<Goal, 'id'> & { id?: number }) => {
+        if (goalData.id) { // Update
+            goalService.update(goalData as Goal).then(() => {
+                setGoals(prev => prev.map(g => g.id === goalData.id ? (goalData as Goal) : g));
+            });
+        } else { // Add
+            const newGoal: Omit<Goal, 'id'> = {
+                ...goalData,
                 createdAt: new Date().toISOString(),
                 completedAt: null,
                 status: GoalStatus.OnTrack,
                 progress: 0,
-                journal: []
+                journal: [],
             };
-            const newGoal = await storageService.add('Goal', newGoalData);
-            setGoals(prev => [...prev, newGoal]);
+            goalService.add(newGoal).then(addedGoal => {
+                setGoals(prev => [...prev, addedGoal]);
+            });
         }
     };
-
-    const handleDeleteGoal = async (goalId: number) => {
-        await storageService.delete('Goal', goalId);
-        setGoals(prev => prev.filter(g => g.id !== goalId));
-    };
-
-    const handleSelectGoal = (goalId: number) => {
-        const goal = goals.find(g => g.id === goalId);
-        if(goal){
-            setActiveSelection({ type: 'goals' });
-            // This is a bit of a hack to make sure GoalsView selects the right goal
-            // A better solution might involve passing the selected ID to the view
-            setTimeout(() => {
-                const event = new CustomEvent('selectGoal', { detail: goalId });
-                window.dispatchEvent(event);
-            }, 50);
-        }
-    }
-
-    // --- Habit Handlers ---
-    const handleUpsertHabit = async (habit: Omit<Habit, 'id' | 'createdAt'> & { id?: number }) => {
-        if (habit.id) { // Update
-            const updatedHabit = { ...habit, createdAt: habits.find(h => h.id === habit.id)!.createdAt } as Habit;
-            await storageService.update('Habit', habit.id, updatedHabit);
-            setHabits(prev => prev.map(h => h.id === habit.id ? updatedHabit : h));
-        } else { // Add
-            const { id, ...rest } = habit;
-            const newHabitData = {
-                ...rest,
-                createdAt: new Date().toISOString(),
-            };
-            const newHabit = await storageService.add('Habit', newHabitData);
-            setHabits(prev => [...prev, newHabit]);
-        }
-    };
-
-    const handleDeleteHabit = async (habitId: number) => {
-        const logsToDelete = habitLogs.filter(log => log.habitId === habitId);
-        for (const log of logsToDelete) {
-            await storageService.delete('HabitLog', log.id);
-        }
-        await storageService.delete('Habit', habitId);
-
-        setHabits(prev => prev.filter(h => h.id !== habitId));
-        setHabitLogs(prev => prev.filter(log => log.habitId !== habitId));
-    };
-
-    const handleAddHabitLog = async (habitId: number, date: string) => {
-        const existingLog = habitLogs.find(log => log.habitId === habitId && log.date === date);
-        if (existingLog) {
-            await storageService.delete('HabitLog', existingLog.id);
-            setHabitLogs(prev => prev.filter(log => log.id !== existingLog.id));
-            return;
-        }
-
-        const newLogData = { habitId, date };
-        const newLog = await storageService.add('HabitLog', newLogData);
-        setHabitLogs(prev => [...prev, newLog]);
-
-        if (userStats) {
-            const updatedStats = gamificationService.processHabitCompletion(userStats);
-            setUserStats(updatedStats);
-            storageService.update('UserStats', 1, updatedStats);
-        }
-    };
-    
-    // --- Custom Reminder Handlers ---
-    const handleUpsertCustomReminder = async (reminder: Omit<CustomReminder, 'id' | 'createdAt'> & { id?: number }) => {
-        if (reminder.id) { // Update
-            const originalReminder = customReminders.find(r => r.id === reminder.id);
-            if (!originalReminder) return;
-            const updatedReminder = { ...originalReminder, ...reminder };
-            await storageService.update('CustomReminder', reminder.id, updatedReminder);
-            setCustomReminders(prev => prev.map(r => r.id === reminder.id ? updatedReminder : r));
-        } else { // Add
-            const { id, ...rest } = reminder;
-            const newReminderData = {
-                ...rest,
-                createdAt: new Date().toISOString(),
-                isCompleted: false,
-            };
-            const newReminder = await storageService.add('CustomReminder', newReminderData);
-            setCustomReminders(prev => [...prev, newReminder]);
-        }
-    };
-
-    const handleDeleteCustomReminder = async (reminderId: number) => {
-        await storageService.delete('CustomReminder', reminderId);
-        setCustomReminders(prev => prev.filter(r => r.id !== reminderId));
-    };
-
-    // --- AI Chat Handlers ---
-    const handleNewChat = () => setActiveChatSessionId(null);
-    const handleSelectChatSession = (sessionId: number) => setActiveChatSessionId(sessionId);
-    const handleSendMessage = async (message: string) => {
-        let currentSessionId = activeChatSessionId;
-        const userMessage: Omit<ChatMessage, 'id'> = { role: 'user', text: message };
-    
-        let sessionToUpdate: ChatSession;
-        let existingSession = currentSessionId ? chatSessions.find(s => s.id === currentSessionId) : undefined;
-        
-        let preliminaryMessages: ChatMessage[];
-    
-        if (!existingSession) {
-            const newSessionData = { title: message.substring(0, 40), messages: [], createdAt: new Date().toISOString() };
-            preliminaryMessages = [{ ...userMessage, id: Date.now() }];
-            sessionToUpdate = await storageService.add('ChatSession', newSessionData);
-            setActiveChatSessionId(sessionToUpdate.id);
-        } else {
-            sessionToUpdate = { ...existingSession, messages: [...existingSession.messages, { ...userMessage, id: Date.now() }] };
-            preliminaryMessages = sessionToUpdate.messages;
-        }
-    
-        // Immediately update UI with user's message for responsiveness
-        setChatSessions(prev => {
-            const exists = prev.some(s => s.id === sessionToUpdate.id);
-            if (exists) {
-                return prev.map(s => s.id === sessionToUpdate.id ? { ...s, messages: preliminaryMessages } : s);
-            }
-            return [{ ...sessionToUpdate, messages: preliminaryMessages }, ...prev];
+    const handleDeleteGoal = (goalId: number) => {
+        goalService.delete(goalId).then(() => {
+            setGoals(prev => prev.filter(g => g.id !== goalId));
         });
+    };
+
+    // Sticky Notes
+    const handleAddStickyNoteBoard = async (name: string): Promise<StickyNoteBoard> => {
+        const newBoard: Omit<StickyNoteBoard, 'id'> = { name, createdAt: new Date().toISOString() };
+        const addedBoard = await stickyNoteService.addBoard(newBoard);
+        setStickyNoteBoards(prev => [...prev, addedBoard]);
+        return addedBoard;
+    };
+    const handleUpdateStickyNoteBoard = (board: StickyNoteBoard) => {
+        stickyNoteService.updateBoard(board).then(() => {
+            setStickyNoteBoards(prev => prev.map(b => b.id === board.id ? board : b));
+        });
+    };
+    const handleDeleteStickyNoteBoard = (boardId: number) => {
+        stickyNoteService.deleteBoard(boardId).then(() => {
+            setStickyNoteBoards(prev => prev.filter(b => b.id !== boardId));
+            setStickyNotes(prev => prev.filter(n => n.boardId !== boardId));
+        });
+    };
+    const handleAddStickyNote = (boardId: number) => {
+        const newNote: Omit<StickyNote, 'id'> = { boardId, title: 'New Note', content: '', color: '#FBBF24', position: { x: 50, y: 50 }, size: { width: 250, height: 200 } };
+        stickyNoteService.addNote(newNote).then(addedNote => {
+            setStickyNotes(prev => [...prev, addedNote]);
+        });
+    };
+    const handleUpdateStickyNote = (note: StickyNote) => {
+        stickyNoteService.updateNote(note).then(() => {
+            setStickyNotes(prev => prev.map(n => n.id === note.id ? note : n));
+        });
+    };
+    const handleDeleteStickyNote = (id: number) => {
+        stickyNoteService.deleteNote(id).then(() => {
+            setStickyNotes(prev => prev.filter(n => n.id !== id));
+        });
+    };
+    const handleAddStickyNoteLink = (link: Omit<StickyNoteLink, 'id'>) => {
+        stickyNoteService.addLink(link).then(addedLink => {
+            setStickyNoteLinks(prev => [...prev, addedLink]);
+        });
+    };
+    const handleUpdateStickyNoteLink = (link: StickyNoteLink) => {
+        stickyNoteService.updateLink(link).then(() => {
+            setStickyNoteLinks(prev => prev.map(l => l.id === link.id ? link : l));
+        });
+    };
+    const handleDeleteStickyNoteLink = (id: number) => {
+        stickyNoteService.deleteLink(id).then(() => {
+            setStickyNoteLinks(prev => prev.filter(l => l.id !== id));
+        });
+    };
+
+
+    // AI Chat
+    const handleNewChat = () => {
+        setActiveChatSessionId(null);
+    };
+
+    const handleSendMessage = async (message: string) => {
         setIsAiLoading(true);
-    
-        const response = await runChat(sessionToUpdate.messages, message, tasks, lists);
-        let modelMessage: Omit<ChatMessage, 'id'>;
-    
-        if (response.toolCalls) {
-            const toolResults = [];
-            for (const toolCall of response.toolCalls) {
-                let resultData: any;
-                let status: 'ok' | 'error' = 'ok';
-                try {
-                    switch (toolCall.name) {
-                        case 'createTask': {
-                            const listId = parseInt(String(toolCall.args.listId), 10);
-                            const taskList = lists.find(l => l.id === listId && l.type === 'task');
-                            if (!taskList) { throw new Error(`Task list with ID ${listId} not found.`); }
-                            resultData = await handleAddItem({ title: String(toolCall.args.title), description: String(toolCall.args.description || ''), dueDate: String(toolCall.args.dueDate), priority: toolCall.args.priority as Priority }, listId, 'task');
-                            break;
-                        }
-                        case 'createNote': {
-                            const noteListId = parseInt(String(toolCall.args.listId), 10);
-                            const noteList = lists.find(l => l.id === noteListId && l.type === 'note');
-                            if (!noteList) { throw new Error(`Note list with ID ${noteListId} not found.`); }
-                            resultData = await handleAddItem({ title: String(toolCall.args.title), content: String(toolCall.args.content || '') }, noteListId, 'note');
-                            break;
-                        }
-                        case 'updateTask': {
-                            const { task: taskToUpdate, error } = findTaskFuzzily(String(toolCall.args.taskTitle));
-                            if (error) throw new Error(error);
-                            if (!taskToUpdate) throw new Error(`Task not found.`);
-                            const updatedTaskData = { ...taskToUpdate };
-                            if (toolCall.args.newTitle) updatedTaskData.title = String(toolCall.args.newTitle);
-                            if (toolCall.args.description) updatedTaskData.description = String(toolCall.args.description);
-                            if (toolCall.args.status) updatedTaskData.status = toolCall.args.status as Status;
-                            if (toolCall.args.priority) updatedTaskData.priority = toolCall.args.priority as Priority;
-                            if (toolCall.args.dueDate) updatedTaskData.dueDate = new Date(String(toolCall.args.dueDate)).toISOString();
-                            await handleUpdateItem(updatedTaskData);
-                            resultData = updatedTaskData;
-                            break;
-                        }
-                        case 'deleteTask': {
-                            const { task: taskToDelete, error } = findTaskFuzzily(String(toolCall.args.taskTitle));
-                            if (error) throw new Error(error);
-                            if (!taskToDelete) { throw new Error(`Task not found.`); }
-                            await handleDeleteItem(taskToDelete.id, 'task');
-                            resultData = { id: taskToDelete.id, status: 'deleted', title: taskToDelete.title };
-                            break;
-                        }
-                        case 'addChecklistItem': {
-                            const { task: taskToUpdate, error } = findTaskFuzzily(String(toolCall.args.taskTitle));
-                            if (error) throw new Error(error);
-                            if (!taskToUpdate) throw new Error(`Task not found.`);
-
-                            const itemText = String(toolCall.args.itemText);
-                            const newChecklistItem: ChecklistItem = { id: newSubId(), text: itemText, completed: false };
-                            const updatedTaskData = { ...taskToUpdate, checklist: [...(taskToUpdate.checklist || []), newChecklistItem] };
-                            await handleUpdateItem(updatedTaskData);
-                            resultData = updatedTaskData;
-                            break;
-                        }
-                        case 'updateChecklistItem': {
-                            const { task: taskToUpdate, error } = findTaskFuzzily(String(toolCall.args.taskTitle));
-                            if (error) throw new Error(error);
-                            if (!taskToUpdate) throw new Error(`Task not found.`);
-                            
-                            const checklistItemText = String(toolCall.args.checklistItemText);
-                            const completed = Boolean(toolCall.args.completed);
-
-                            let itemUpdated = false;
-                            const updatedChecklist = taskToUpdate.checklist.map(item => {
-                                if (!itemUpdated && item.text.toLowerCase() === checklistItemText.toLowerCase()) {
-                                    itemUpdated = true;
-                                    return { ...item, completed };
-                                }
-                                return item;
-                            });
-
-                            if (!itemUpdated) { throw new Error(`Checklist item "${checklistItemText}" not found in task "${taskToUpdate.title}".`); }
-                            
-                            const updatedTaskData = { ...taskToUpdate, checklist: updatedChecklist };
-                            await handleUpdateItem(updatedTaskData);
-                            resultData = updatedTaskData;
-                            break;
-                        }
-                        default:
-                            throw new Error(`Unknown tool: ${toolCall.name}`);
-                    }
-                } catch (e: any) {
-                    status = 'error';
-                    resultData = { error: e.message };
-                }
-    
-                toolResults.push({ callId: `call_${newSubId()}`, toolName: toolCall.name, data: resultData, status });
-            }
-            
-            const successfulCalls = toolResults.filter(r => r.status === 'ok');
-            const erroredCalls = toolResults.filter(r => r.status === 'error');
-            
-            let resultText = '';
-            if (successfulCalls.length > 0) {
-                const firstResult = successfulCalls[0];
-                const itemName = firstResult.data?.title || '';
-                switch (firstResult.toolName) {
-                    case 'createTask': resultText = `I've created the task "${itemName}".`; break;
-                    case 'createNote': resultText = `I've created the note "${itemName}".`; break;
-                    case 'updateTask': resultText = `I've updated the task "${itemName}".`; break;
-                    case 'deleteTask': resultText = `I've deleted the task "${itemName}".`; break;
-                    case 'addChecklistItem':
-                    case 'updateChecklistItem': resultText = `I've updated the checklist for task "${itemName}".`; break;
-                    default: resultText = `${firstResult.toolName} was successful.`;
-                }
-            }
-            if (erroredCalls.length > 0) {
-                 resultText += `\nI encountered an error: ${erroredCalls[0].data.error}`;
-            }
-    
-            modelMessage = { role: 'model', text: resultText, toolResult: successfulCalls.length > 0 ? successfulCalls[0] : undefined };
-    
-        } else {
-            modelMessage = { role: 'model', text: response.text || 'Sorry, I could not process that.' };
+        let currentSession = activeChatSessionId ? chatSessions.find(s => s.id === activeChatSessionId) : null;
+        
+        // Create a new session if one doesn't exist
+        if (!currentSession) {
+            const newSessionData: Omit<ChatSession, 'id'> = {
+                title: message.substring(0, 30),
+                messages: [],
+                createdAt: new Date().toISOString(),
+            };
+            currentSession = await chatService.add(newSessionData);
+            setChatSessions(prev => [...prev, currentSession!]);
+            setActiveChatSessionId(currentSession!.id);
         }
+
+        const userMessage: ChatMessage = { id: newSubId(), role: 'user', text: message };
+        let updatedMessages = [...currentSession!.messages, userMessage];
         
-        sessionToUpdate.messages = [...preliminaryMessages, { ...modelMessage, id: Date.now() }];
+        // Immediately update UI with user's message
+        setChatSessions(prev => prev.map(s => s.id === currentSession!.id ? { ...s, messages: updatedMessages } : s));
         
-        await storageService.update('ChatSession', sessionToUpdate.id, sessionToUpdate);
-    
-        setChatSessions(prev => prev.map(s => s.id === sessionToUpdate.id ? sessionToUpdate : s));
+        // Get AI response
+        const { text, toolCalls } = await runChat(updatedMessages, message, tasks, lists);
+        let modelResponse: ChatMessage = { id: newSubId(), role: 'model', text: text || '' };
+        
+        if (toolCalls && toolCalls.length > 0) {
+            modelResponse.toolCalls = toolCalls;
+            // For simplicity, we process the first valid tool call.
+            const call = toolCalls[0];
+            let resultData: any = { error: "Tool not implemented" };
+            let status: 'ok' | 'error' = 'error';
+
+            try {
+                if (call.name === 'createTask') {
+                    // FIX: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+                    const listId = call.args.listId || findListFuzzily(call.args.listName as string)?.id || (lists.find(l=>l.type === 'task')?.id);
+                    if (!listId) throw new Error("Could not find a valid list to create the task in.");
+                    const taskData: Partial<Task> = {
+                        // FIX: Type 'unknown' is not assignable to type 'string'.
+                        title: call.args.title as string,
+                        // FIX: Type 'unknown' is not assignable to type 'string'.
+                        description: call.args.description as string,
+                        // FIX: Type 'unknown' is not assignable to type 'string'.
+                        dueDate: call.args.dueDate as string || new Date().toISOString(),
+                        // FIX: Type 'unknown' is not assignable to type 'Priority'.
+                        priority: call.args.priority as Priority || Priority.Medium,
+                    };
+                    resultData = await handleAddItem(taskData, Number(listId), 'task');
+                    status = 'ok';
+                } else if (call.name === 'updateTask') {
+                    // FIX: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+                    const { task, error } = findTaskFuzzily(call.args.taskTitle as string);
+                    if (error) throw new Error(error);
+                    if (task) {
+                        const updatedTask = { ...task, ...call.args };
+                        handleUpdateItem(updatedTask);
+                        resultData = updatedTask;
+                        status = 'ok';
+                    } else {
+                         throw new Error(`Task '${call.args.taskTitle as string}' not found.`);
+                    }
+                } else if (call.name === 'addChecklistItem') {
+                    // FIX: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+                    const { task, error } = findTaskFuzzily(call.args.taskTitle as string);
+                    if (error) throw new Error(error);
+                    if (task) {
+                        const newItem: ChecklistItem = { id: newSubId(), text: call.args.itemText as string, completed: false };
+                        const updatedTask = { ...task, checklist: [...task.checklist, newItem] };
+                        handleUpdateItem(updatedTask);
+                        resultData = updatedTask;
+                        status = 'ok';
+                    } else {
+                         throw new Error(`Task '${call.args.taskTitle as string}' not found.`);
+                    }
+                }
+            } catch (e) {
+                console.error("Tool call failed:", e);
+                // FIX: Argument of type 'unknown' is not assignable to parameter of type 'string'. Safely access error message.
+                resultData = { error: e instanceof Error ? e.message : String(e) };
+            }
+
+            modelResponse.toolResult = { callId: "1", toolName: call.name, data: resultData, status };
+        }
+
+        updatedMessages = [...updatedMessages, modelResponse];
+        
+        // Update session with both user and model messages
+        const updatedSession = { ...currentSession, messages: updatedMessages };
+        await chatService.update(updatedSession);
+        setChatSessions(prev => prev.map(s => s.id === currentSession!.id ? updatedSession : s));
         setIsAiLoading(false);
     };
-
+    
     const handleQuickAddTask = async (text: string) => {
         setIsAiLoading(true);
-        const parsedData = await parseQuickAddTask(text);
-        
-        if (!parsedData || !parsedData.title) {
-            notificationService.send('Quick Add Failed', { body: 'Could not understand your request.' });
-            setIsAiLoading(false);
-            return;
-        }
-        
-        let targetList: List | null | undefined;
-        const taskLists = lists.filter(l => l.type === 'task');
-
-        if (parsedData.listName) {
-            targetList = findListFuzzily(parsedData.listName);
-        }
-
-        if (!targetList) {
-            targetList = taskLists[0]; // Default to first task list
-        }
-
-        if (!targetList) {
-            notificationService.send('Quick Add Failed', { body: 'No task lists found to add the task to.' });
-            setIsAiLoading(false);
-            return;
-        }
-
-        const newTaskData: Partial<Task> = {
-            title: parsedData.title,
-            priority: parsedData.priority || Priority.Medium,
-            dueDate: parsedData.dueDate ? new Date(`${parsedData.dueDate}T00:00:00`).toISOString() : new Date().toISOString(),
-        };
-
         try {
-            const createdTask = await handleAddItem(newTaskData, targetList.id, 'task');
-            if (createdTask) {
-                notificationService.send('Task Created', { body: `"${createdTask.title}" was added to ${targetList.name}.` });
+            const parsed = await parseQuickAddTask(text);
+            if (!parsed) throw new Error("Could not parse the task.");
+            
+            const listName = parsed.listName;
+            let targetListId: number | null = null;
+
+            if (listName) {
+                const foundList = findListFuzzily(listName);
+                if (foundList) {
+                    targetListId = foundList.id;
+                } else {
+                    const newList = await handleAddList({ name: listName, color: '#8b64fd', type: 'task', parentId: null });
+                    targetListId = newList.id;
+                }
+            } else {
+                targetListId = lists.find(l => l.type === 'task')?.id || null;
+                if (!targetListId) {
+                    const newList = await handleAddList({ name: 'Inbox', color: '#8b64fd', type: 'task', parentId: null });
+                    targetListId = newList.id;
+                }
             }
-        } catch (error) {
-            console.error(error);
-            notificationService.send('Quick Add Failed', { body: 'An error occurred while creating the task.' });
+
+            const taskData: Partial<Task> = {
+                title: parsed.title,
+                priority: parsed.priority || Priority.Medium,
+                dueDate: parsed.dueDate || new Date().toISOString(),
+            };
+            await handleAddItem(taskData, targetListId, 'task');
+
+        } catch(e) {
+            console.error("Quick add failed:", e);
+            // FIX: Argument of type 'unknown' is not assignable to parameter of type 'string'. Safely access error message.
+            const message = e instanceof Error ? e.message : String(e);
+            alert(`Quick Add Failed: ${message}`);
         } finally {
             setIsAiLoading(false);
         }
     };
 
-    const handleOnboardingComplete = async (details: { userName: string; apiKey?: string }) => {
-        setUserName(details.userName);
-        if (details.apiKey) {
-            setApiKey(details.apiKey);
-            initializeAi(details.apiKey);
-        }
-        await storageService.setSetting('onboardingComplete', "true");
-        await storageService.setSetting('userName', details.userName);
-        await storageService.setSetting('apiKey', details.apiKey || "");
-
-        const defaultListsData: (Omit<List, 'id'>)[] = [
-            { name: 'My Tasks', color: '#8b64fd', type: 'task', parentId: null, defaultView: 'list', statuses: [{ status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Done, name: 'Done' }] },
-            { name: 'Work', color: '#3B82F6', type: 'task', parentId: null, defaultView: 'board', statuses: [{ status: Status.Backlog, name: 'Backlog' }, { status: Status.ToDo, name: 'To Do' }, { status: Status.InProgress, name: 'In Progress' }, { status: Status.Review, name: 'In Review' }, { status: Status.Done, name: 'Done' }] },
-            { name: 'Quick Notes', color: '#FBBF24', type: 'note', parentId: null },
-        ];
-        
-        const addedLists = await Promise.all(defaultListsData.map(list => storageService.add('List', list)));
-
-        setLists(addedLists);
-        setIsOnboardingComplete(true);
-    };
-
+    // User & Settings
     const handleUpdateUser = async (name: string) => {
-        await storageService.setSetting('userName', name);
+        await settingsService.setSetting('userName', name);
         setUserName(name);
     };
-
     const handleUpdateApiKey = async (key: string) => {
-        await storageService.setSetting('apiKey', key);
+        await settingsService.setSetting('apiKey', key);
         setApiKey(key);
         initializeAi(key);
     };
-
-    const handleOpenAddItemPane = (listId: number, type: 'task' | 'note') => {
-        setDetailItem(null);
-        setAddingItemInfo({ listId, type });
-    };
-
-    const handleCloseDetailPane = () => {
-        setDetailItem(null);
-        setAddingItemInfo(null);
-    };
-
-    const handleSetCustomFieldDefinitions = async (definitions: CustomFieldDefinition[]) => {
-        // This is tricky because we don't have a single object. We must update one by one.
-        // For simplicity, let's assume we can replace the whole collection.
-        // A better implementation would diff and update.
-        const currentIds = new Set(customFieldDefinitions.map(d => d.id));
-        const newIds = new Set(definitions.map(d => d.id));
-
-        for (const def of definitions) {
-            await storageService.update('CustomFieldDefinition', def.id, def);
-        }
-        for (const id of currentIds) {
-            if (!newIds.has(id)) {
-                await storageService.delete('CustomFieldDefinition', id);
-            }
-        }
-
-        setCustomFieldDefinitions(definitions);
+    
+    if (!isDataLoaded) {
+        return <div className="flex items-center justify-center h-full">Loading...</div>;
     }
     
-    const handleStartFocus = (task: Task) => {
-        setFocusItem({ task });
-    };
-
-    const handleStartSubtaskFocus = (task: Task, subtask: ChecklistItem) => {
-        setFocusItem({ task, subtask });
-    };
-
-    const handleFocusSessionComplete = (item: FocusItem, duration: number) => {
-        const { task, subtask } = item;
-        
-        setFocusItem(null); // Close the view
-
-        setFocusSessionCompleteInfo({ item, duration }); // Open the modal
-
-        const createdAt = new Date().toISOString();
-        const newActivityLog: ActivityLog = {
-            id: newSubId(),
-            type: 'focus',
-            content: {
-                duration: duration,
-                focusedOn: subtask ? `subtask: "${subtask.text}"` : `task: "${task.title}"`,
-            },
-            taskTitle: task.title,
-            createdAt,
-            userName,
-        };
-        
-        // Ensure activityLog array exists.
-        const updatedTask = {
-            ...task,
-            activityLog: [...(task.activityLog || []), newActivityLog]
-        };
-
-        handleUpdateItem(updatedTask);
-    };
-
-    if (!isDataLoaded) {
-        return <div className="w-full h-full bg-brand-light dark:bg-sidebar-dark flex items-center justify-center"><div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
-    }
-
     if (!isOnboardingComplete) {
         return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+    }
+    
+    if (focusItem) {
+        return <FocusModeView 
+            focusItem={focusItem}
+            onClose={() => setFocusItem(null)}
+            onUpdateTask={handleUpdateItem as (t:Task)=>void}
+            onFocusSessionComplete={(item, duration) => {
+                const activity: ActivityLog = {
+                    id: newSubId(),
+                    type: 'focus',
+                    content: { duration, focusedOn: item.subtask ? `subtask "${item.subtask.text}"` : 'the task' },
+                    taskTitle: item.task.title,
+                    createdAt: new Date().toISOString(),
+                    userName: userName,
+                };
+                const updatedTask = { ...item.task, activityLog: [...item.task.activityLog, activity] };
+                handleUpdateItem(updatedTask);
+                setFocusSessionCompleteInfo({ item, duration });
+                setFocusItem(null);
+            }}
+        />
     }
 
     return (
         <>
             <AppLayout
                 isSidebarCollapsed={isSidebarCollapsed}
-                onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+                onToggleSidebar={() => setIsSidebarCollapsed(p => !p)}
                 lists={lists}
                 tasks={tasks}
                 notes={notes}
                 savedFilters={savedFilters}
                 stickyNotes={stickyNotes}
+                stickyNoteBoards={stickyNoteBoards}
+                stickyNoteLinks={stickyNoteLinks}
                 chatSessions={chatSessions}
                 activeChatSessionId={activeChatSessionId}
                 onSendMessage={handleSendMessage}
                 onNewChat={handleNewChat}
-                onSelectChatSession={handleSelectChatSession}
+                onSelectChatSession={setActiveChatSessionId}
                 activeSelection={activeSelection}
                 onActiveSelectionChange={setActiveSelection}
                 detailItem={detailItem}
                 onDetailItemChange={setDetailItem}
                 addingItemInfo={addingItemInfo}
-                onOpenAddItemPane={handleOpenAddItemPane}
-                onCloseDetailPane={handleCloseDetailPane}
+                onOpenAddItemPane={(listId, type) => { setDetailItem(null); setAddingItemInfo({ listId, type }); }}
+                onCloseDetailPane={() => { setDetailItem(null); setAddingItemInfo(null); }}
                 onAddList={handleAddList}
                 onUpdateList={handleUpdateList}
                 onDeleteList={handleDeleteList}
@@ -1055,84 +886,104 @@ const App = () => {
                 onUpdateItem={handleUpdateItem}
                 onDeleteItem={handleDeleteItem}
                 onAddComment={handleAddComment}
-                onAddSavedFilter={handleAddSavedFilter}
-                onDeleteSavedFilter={handleDeleteSavedFilter}
+                onAddSavedFilter={(name, filter) => {
+                    savedFilterService.add({ name, filter }).then(newFilter => {
+                        setSavedFilters(prev => [...prev, newFilter]);
+                    });
+                }}
+                onDeleteSavedFilter={(id) => {
+                    savedFilterService.delete(id).then(() => {
+                        setSavedFilters(prev => prev.filter(f => f.id !== id));
+                    });
+                }}
+                onAddStickyNoteBoard={handleAddStickyNoteBoard}
+                onUpdateStickyNoteBoard={handleUpdateStickyNoteBoard}
+                onDeleteStickyNoteBoard={handleDeleteStickyNoteBoard}
                 onAddStickyNote={handleAddStickyNote}
                 onUpdateStickyNote={handleUpdateStickyNote}
                 onDeleteStickyNote={handleDeleteStickyNote}
+                onAddStickyNoteLink={handleAddStickyNoteLink}
+                onUpdateStickyNoteLink={handleUpdateStickyNoteLink}
+                onDeleteStickyNoteLink={handleDeleteStickyNoteLink}
                 goals={goals}
                 onUpsertGoal={handleUpsertGoal}
                 onDeleteGoal={handleDeleteGoal}
-                onSelectGoal={handleSelectGoal}
+                onSelectGoal={(goalId) => {
+                    setActiveSelection({ type: 'goals' });
+                    // This is a bit of a hack to ensure the detail view updates
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('selectGoal', { detail: goalId })), 50);
+                }}
                 habits={habits}
                 habitLogs={habitLogs}
                 onUpsertHabit={handleUpsertHabit}
                 onDeleteHabit={handleDeleteHabit}
                 onAddHabitLog={handleAddHabitLog}
                 customReminders={customReminders}
-                onUpsertCustomReminder={handleUpsertCustomReminder}
-                onDeleteCustomReminder={handleDeleteCustomReminder}
+                onUpsertCustomReminder={(r) => {
+                    if (r.id) {
+                        reminderService.update(r as CustomReminder).then(() => {
+                           setCustomReminders(p => p.map(pr => pr.id === r.id ? (r as CustomReminder) : pr));
+                        });
+                    } else {
+                        const newR = { ...r, createdAt: new Date().toISOString(), isCompleted: false };
+                         reminderService.add(newR as Omit<CustomReminder, 'id'>).then(added => {
+                           setCustomReminders(p => [...p, added]);
+                        });
+                    }
+                }}
+                onDeleteCustomReminder={(id) => {
+                    reminderService.delete(id).then(() => {
+                        setCustomReminders(p => p.filter(pr => pr.id !== id));
+                    });
+                }}
                 userStats={userStats}
                 userName={userName}
                 apiKey={apiKey}
                 onUpdateUser={handleUpdateUser}
                 onUpdateApiKey={handleUpdateApiKey}
                 customFieldDefinitions={customFieldDefinitions}
-                setCustomFieldDefinitions={handleSetCustomFieldDefinitions}
+                setCustomFieldDefinitions={(defs) => {
+                    // This is a batch operation, simpler to clear and re-add.
+                    customFieldService.getAll().then(allFields => {
+                        Promise.all(allFields.map(f => customFieldService.delete(f.id))).then(() => {
+                            Promise.all(defs.map(d => customFieldService.add(d as Omit<CustomFieldDefinition, 'id'>))).then(() => {
+                                setCustomFieldDefinitions(defs);
+                            });
+                        });
+                    });
+                }}
                 isSearchOpen={isSearchOpen}
                 setIsSearchOpen={setIsSearchOpen}
-                onStartFocus={handleStartFocus}
-                onStartSubtaskFocus={handleStartSubtaskFocus}
+                onStartFocus={(task) => setFocusItem({ task })}
+                onStartSubtaskFocus={(task, subtask) => setFocusItem({ task, subtask })}
                 isAiLoading={isAiLoading}
                 onQuickAddTask={handleQuickAddTask}
             />
-            {focusItem && (
-                <FocusModeView
-                    focusItem={focusItem}
-                    onClose={() => setFocusItem(null)}
-                    onUpdateTask={handleUpdateItem as (task: Task) => void}
-                    onFocusSessionComplete={handleFocusSessionComplete}
-                />
-            )}
-             {focusSessionCompleteInfo && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md animate-fade-in-overlay">
-                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-md m-4 transform transition-all animate-scale-in flex flex-col items-center text-center">
-                        <CheckCircleIcon className="w-16 h-16 text-green-500 mb-4" />
-                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Time's Up!</h2>
-                        <p className="text-gray-600 dark:text-gray-400 mt-2">
-                            Great job! You completed a {focusSessionCompleteInfo.duration}-minute focus session on:
+            {focusSessionCompleteInfo && (
+                 <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md animate-fade-in-overlay" onClick={() => setFocusSessionCompleteInfo(null)}>
+                    <div className="bg-card-light dark:bg-card-dark rounded-2xl shadow-2xl p-8 w-full max-w-sm m-4 transform transition-all animate-scale-in flex flex-col items-center text-center">
+                        <CheckCircleIcon className="w-16 h-16 text-green-500 mb-4"/>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white">Focus Session Complete!</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            Great work! You completed a {focusSessionCompleteInfo.duration}-minute focus session on "{focusSessionCompleteInfo.item.subtask?.text || focusSessionCompleteInfo.item.task.title}".
                         </p>
-                        <p className="font-semibold mt-1 text-primary">
-                            {focusSessionCompleteInfo.item.subtask ? focusSessionCompleteInfo.item.subtask.text : focusSessionCompleteInfo.item.task.title}
-                        </p>
-                        <button
-                            onClick={() => setFocusSessionCompleteInfo(null)}
-                            className="mt-6 w-full px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors"
-                        >
-                            OK
-                        </button>
+                         <button onClick={() => setFocusSessionCompleteInfo(null)} className="mt-6 w-full px-4 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark">Continue</button>
                     </div>
-                </div>
+                 </div>
             )}
-            {/* In-App Notification Container */}
-            <div className="fixed top-4 right-4 z-[100] space-y-3">
-                {inAppNotifications.map(notification => (
-                    <div key={notification.id} className="w-80 bg-card-light dark:bg-card-dark rounded-xl shadow-2xl p-4 border border-gray-200 dark:border-gray-700 animate-slide-in-right">
-                        <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-1">
-                                <BellIcon className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-800 dark:text-white">{notification.title}</h3>
-                                {notification.body && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{notification.body}</p>}
-                            </div>
-                            <button 
-                                onClick={() => setInAppNotifications(prev => prev.filter(n => n.id !== notification.id))}
-                                className="p-1 -mt-1 -mr-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ml-auto flex-shrink-0"
-                            >
-                                <XMarkIcon className="w-4 h-4 text-gray-500" />
-                            </button>
+             <div className="fixed top-4 right-4 z-50 w-full max-w-sm space-y-2">
+                {inAppNotifications.map(n => (
+                    <div key={n.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 flex items-start gap-3 border border-gray-200 dark:border-gray-700 animate-slide-in-right">
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                            <BellIcon className="w-5 h-5 text-white" />
                         </div>
+                        <div className="flex-grow">
+                            <p className="font-semibold text-gray-800 dark:text-white">{n.title}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">{n.body}</p>
+                        </div>
+                        <button onClick={() => setInAppNotifications(prev => prev.filter(p => p.id !== n.id))} className="p-1 -m-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <XMarkIcon className="w-4 h-4 text-gray-400" />
+                        </button>
                     </div>
                 ))}
             </div>

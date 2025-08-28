@@ -37,6 +37,7 @@ type AITask = {
   title: string;
   description: string;
   checklist: string[];
+  durationInDays: number;
   dueDate: string;
 }
 
@@ -61,11 +62,63 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
   const [promptTemplate, setPromptTemplate] = useState(defaultPromptTemplate);
 
   useEffect(() => {
-    const taskLists = lists.filter(l => l.type === 'task');
-    if (taskLists.length > 0 && !targetListId) {
-        setTargetListId(taskLists[0].id);
+    if (aiPlan) {
+        const taskLists = lists.filter(l => l.type === 'task');
+        // If no list is selected yet, or the current selection is invalid
+        if (!targetListId || !taskLists.some(l => l.id === targetListId)) {
+            // Check if a list with the suggested name already exists (case-insensitive)
+            const existingList = taskLists.find(l => l.name.toLowerCase() === aiPlan.listSuggestion.toLowerCase());
+            if (existingList) {
+                setTargetListId(existingList.id);
+            } else {
+                // Default to creating a new list. This will pre-select it in the dropdown.
+                setTargetListId(`new:${aiPlan.listSuggestion}`);
+            }
+        }
+    } else {
+        // Set initial default if not in AI plan mode yet
+        const taskLists = lists.filter(l => l.type === 'task');
+        if (taskLists.length > 0 && !targetListId) {
+            setTargetListId(taskLists[0].id);
+        }
     }
-  }, [lists, targetListId]);
+  }, [aiPlan, lists]);
+
+
+  // Effect to automatically reschedule tasks when the target date changes.
+  useEffect(() => {
+    if (!targetDate) return;
+
+    setAiPlan(currentPlan => {
+        if (!currentPlan || currentPlan.tasks.length === 0) {
+            return currentPlan;
+        }
+
+        const lastTask = currentPlan.tasks[currentPlan.tasks.length - 1];
+        if (lastTask && format(new Date(lastTask.dueDate), 'yyyy-MM-dd') === targetDate) {
+            return currentPlan;
+        }
+
+        const totalDuration = currentPlan.tasks.reduce((sum, task) => sum + (task.durationInDays || 1), 0);
+        if (totalDuration <= 0) return currentPlan;
+
+        const newEndDate = new Date(`${targetDate}T00:00:00`);
+        const newStartDate = addDays(newEndDate, -totalDuration);
+
+        let cumulativeDate = newStartDate;
+        const rescheduledTasks = currentPlan.tasks.map(task => {
+            const duration = task.durationInDays > 0 ? task.durationInDays : 1;
+            cumulativeDate = addDays(cumulativeDate, duration);
+            return {
+                ...task,
+                dueDate: cumulativeDate.toISOString(),
+            };
+        });
+
+        return { ...currentPlan, tasks: rescheduledTasks };
+    });
+  }, [targetDate]);
+
 
   const handlePlanWithAI = async () => {
     if (!userInput.trim()) return;
@@ -73,13 +126,14 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
     const plan = await refineAndPlanGoal(userInput, promptTemplate);
     if (plan) {
       let cumulativeDate = new Date();
-      const tasksWithDates = plan.tasks.map(t => {
-          const duration = (t as any).durationInDays > 0 ? (t as any).durationInDays : 1;
+      const tasksWithDates = plan.tasks.map((t: any) => {
+          const duration = t.durationInDays > 0 ? t.durationInDays : 1;
           cumulativeDate = addDays(cumulativeDate, duration);
           return {
               ...t,
               id: newId(),
               dueDate: cumulativeDate.toISOString(),
+              durationInDays: duration,
           };
       });
       setAiPlan({ ...plan, tasks: tasksWithDates });
@@ -105,7 +159,7 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
   const handleAddTask = () => {
       if (!aiPlan) return;
       const lastTaskDate = aiPlan.tasks.length > 0 ? new Date(aiPlan.tasks[aiPlan.tasks.length - 1].dueDate) : new Date();
-      const newTask: AITask = { id: newId(), title: 'New Task', description: '', checklist: [], dueDate: addDays(lastTaskDate, 1).toISOString() };
+      const newTask: AITask = { id: newId(), title: 'New Task', description: '', checklist: [], durationInDays: 1, dueDate: addDays(lastTaskDate, 1).toISOString() };
       setAiPlan({ ...aiPlan, tasks: [...aiPlan.tasks, newTask] });
       setSelectedTasks(prev => new Set(prev).add(newTask.id));
       setEditingTask(newTask);
@@ -168,7 +222,7 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
     selectedTasks.forEach(taskId => {
         const taskData = aiPlan.tasks.find(t => t.id === taskId);
         if(taskData) {
-            const {id, ...taskToCreateBase} = taskData; // remove temporary ID
+            const {id, durationInDays, ...taskToCreateBase} = taskData; // remove temporary fields
             const taskToCreate: Partial<Task> = {
                 title: taskToCreateBase.title,
                 description: taskToCreateBase.description,
@@ -190,7 +244,7 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-md animate-fade-in-overlay" onMouseDown={onClose}>
-      <div className="bg-page dark:bg-page-dark rounded-2xl w-full max-w-4xl h-[80vh] flex flex-col animate-scale-in" onMouseDown={e => e.stopPropagation()}>
+      <div className="bg-page dark:bg-page-dark rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col animate-scale-in" onMouseDown={e => e.stopPropagation()}>
         <header className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
           <h2 className="text-xl font-bold">New Goal</h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><XMarkIcon className="w-6 h-6" /></button>
@@ -238,12 +292,12 @@ const CreateGoalWizard = ({ onClose, onGoalCreate, onTasksCreate, lists, onAddLi
         )}
 
         {step === 2 && aiPlan && (
-          <div className="flex-grow grid grid-cols-2 grid-rows-[1fr] gap-0 overflow-hidden">
+          <div className="flex-grow grid grid-cols-2 grid-rows-[1fr] gap-0 min-h-0">
             <div className="p-6 border-r border-gray-200 dark:border-gray-700 flex flex-col">
                 <h3 className="text-lg font-semibold mb-2">Your Input:</h3>
                 <p className="flex-grow p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm italic">"{userInput}"</p>
             </div>
-            <div className="p-6 flex flex-col h-full overflow-hidden">
+            <div className="p-6 flex flex-col h-full min-h-0">
                 <h3 className="text-lg font-semibold mb-4 text-primary flex-shrink-0">AI's Suggested Plan</h3>
                 
                 {/* Non-scrolling top part */}
@@ -342,33 +396,33 @@ const TaskEditForm = ({ task, onSave, onCancel }: { task: AITask; onSave: (task:
     }
 
     return (
-        <div className="space-y-2 p-2 bg-white dark:bg-gray-800 border rounded-md">
+        <div className="space-y-2 p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
             <input 
                 type="text" 
                 value={editedTask.title} 
                 onChange={e => setEditedTask({...editedTask, title: e.target.value})} 
-                className="w-full form-input text-sm font-semibold p-1"
+                className="w-full text-sm font-semibold p-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-primary focus:border-primary"
             />
             <textarea 
                 value={editedTask.description} 
                 onChange={e => setEditedTask({...editedTask, description: e.target.value})}
                 rows={2} 
-                className="w-full form-textarea text-xs p-1" 
+                className="w-full text-xs p-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-primary focus:border-primary" 
             />
             <div className="space-y-1">
-                <label className="text-xs font-medium">Checklist:</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Checklist:</label>
                 {editedTask.checklist.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                         <input type="text" value={item} onChange={e => {
                             const newChecklist = [...editedTask.checklist];
                             newChecklist[index] = e.target.value;
                             setEditedTask({...editedTask, checklist: newChecklist});
-                        }} className="w-full form-input text-xs p-1" />
+                        }} className="w-full text-xs p-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-primary focus:border-primary" />
                         <button onClick={() => handleRemoveChecklistItem(index)}><TrashIcon className="w-3 h-3 text-red-500"/></button>
                     </div>
                 ))}
                  <div className="flex items-center gap-2">
-                    <input type="text" value={newChecklistItem} onChange={e => setNewChecklistItem(e.target.value)} placeholder="New item" className="w-full form-input text-xs p-1"/>
+                    <input type="text" value={newChecklistItem} onChange={e => setNewChecklistItem(e.target.value)} placeholder="New item" className="w-full text-xs p-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-primary focus:border-primary"/>
                     <button onClick={handleAddChecklistItem}><PlusIcon className="w-4 h-4 text-primary"/></button>
                 </div>
             </div>
