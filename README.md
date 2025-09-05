@@ -70,8 +70,8 @@ In an age of information overload, TaskFlow AI aims to solve the core problem of
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/taskflow-ai.git
-    cd taskflow-ai
+    git clone [https://github.com/your-username/taskflow-ai.git](https://github.com/abhi9720/NexusDeskAI.git)
+    cd NexusDeskAI
     ```
 
 2.  **Install dependencies:**
